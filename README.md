@@ -13,4 +13,4 @@ Units in cm; origin = inside corner of the garden facade and the left party wall
 - Run `python3 src/build.py` to regenerate the self-contained `index.html`. Pushing to `main` redeploys Pages (~1 min).
 - URL hash filters: `#only=island-B,dining` shows only those items.
 
-Screenshots are stored base64-encoded in `screenshots/*.png.b64` and decoded by the Pages workflow.
+Screenshots are stored base64-encoded in `screenshots/*.png.b64` and decoded by the workflow, which publishes the built site to the `gh-pages` branch (served by GitHub Pages).
