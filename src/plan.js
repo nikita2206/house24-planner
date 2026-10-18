@@ -13,7 +13,7 @@ window.PLAN = {
     title: "House 24 - Ground floor (begane grond)",
     subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
     source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
-    version: "v3 - 2026-10-18 (first floor)",
+    version: "v4 - 2026-10-18 (first floor: bath layouts)",
     notes: [
       "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
       "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm."
@@ -198,7 +198,8 @@ window.PLAN.firstFloor = {
     notes: [
       "Room sizes (inside, excl. finish): slaapkamer 1 514 x 374 (19.2 m2), slaapkamer 2 262 x 361 (9.5 m2), slaapkamer 3 244 x 238 (5.8 m2), badkamer 262 x 226 (5.9 m2), overloop 108 x 356, techniek 128 x 110.",
       "Sanitary, WTW and manifold positions are copied from the sales drawing symbols; sizes are approximate (not dimensioned on the drawing).",
-      "Door leaves ~92 cm, positions read from the drawing (not dimensioned). Bathroom and techniek doors swing into the landing."
+      "Door leaves ~92 cm, positions read from the drawing (not dimensioned). Bathroom and techniek doors swing into the landing.",
+      "Master: 180x200 bed on the left party wall with bedside tables; built-in wardrobe along the full right party wall (374 x 60). Slaapkamer 2 = kids room (bunk bed, kids desk, play space). Slaapkamer 3 = study (desk 120x90 facing the window, 70 cm chair zone, bookcase)."
     ]
   },
   size: [514, 982],
@@ -246,12 +247,11 @@ window.PLAN.firstFloor = {
     { id: "railing", label: "stair railing (traphek)", x: 375.5, y: 381.4, w: 4.5, d: 238.6, kind: "boxing", solid: true, labelAt: [371, 470], labelRotate: -90, labelSize: 7 },
     { id: "shaft", label: "pipe shaft", x: 0, y: 337, w: 25, d: 37.4, kind: "boxing", solid: true, labelAt: [32, 333], labelSize: 7 },
     { id: "wc-wall", label: "WC pre-wall (voorzetwand)", x: 0, y: 384.6, w: 120, d: 25, kind: "boxing", solid: true, labelSize: 7, labelAt: [60, 400] },
-    { id: "wc", label: "WC", x: 57, y: 409.6, w: 43, d: 55, kind: "appliance" },
-    { id: "basin", label: "washbasin", x: 154, y: 384.6, w: 75, d: 48, kind: "appliance" },
-    { id: "shower", label: "shower ~90x90", x: 0, y: 520, w: 91, d: 90, kind: "appliance" },
-    { id: "wd-wm", label: "washer/dryer (wd/wm)", x: 181, y: 545, w: 60, d: 60, kind: "appliance" },
-    { id: "wtw", label: "WTW unit", x: 457, y: 637, w: 57, d: 64, kind: "appliance" },
-    { id: "ufh", label: "UFH manifold (vv)", x: 405, y: 627.6, w: 49, d: 16, kind: "appliance", labelAt: [430, 655], labelSize: 7 }
+    { id: "wc", label: "WC", x: 57, y: 409.6, w: 43, d: 55, kind: "appliance", solid: true },
+    { id: "basin", label: "washbasin", x: 154, y: 384.6, w: 75, d: 48, kind: "appliance", solid: true },
+    { id: "wtw", label: "WTW unit", x: 457, y: 637, w: 57, d: 64, kind: "appliance", solid: true },
+    { id: "ufh", label: "UFH manifold (vv)", x: 405, y: 627.6, w: 49, d: 16, kind: "appliance", solid: true, labelAt: [430, 655], labelSize: 7 }
+    // Shower, bath and washer/dryer are layout items (see layouts below) so they can move per bathroom variant.
   ],
   dims: [
     { from: [0, 30], to: [514, 30], label: "5140" },
@@ -269,22 +269,37 @@ window.PLAN.firstFloor = {
     { from: [269.7, 790], to: [514, 790], label: "2445" },
     { from: [404, 744.6], to: [404, 982], label: "2375" }
   ],
-  furniture: [],
-  defaultLayout: "bedrooms",
+  // Shared by all first-floor layouts (bedrooms). Bathroom variants are in layouts.
+  furniture: [
+    { id: "bed-sk1", label: "Bed 180x200", x: 0, y: 85, w: 200, d: 180, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
+    { id: "nst-sk1-a", label: "Bedside", x: 0, y: 40, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+    { id: "nst-sk1-b", label: "Bedside", x: 0, y: 265, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+    { id: "wardrobe-sk1", label: "Built-in wardrobe 374 (full wall)", x: 454, y: 0, w: 60, d: 374.4, rotation: 0, color: "#b8a48a", shape: "rect", note: "Integrated wardrobe along the full right party wall (374 cm, 60 deep). Left wall has the bed and the pipe shaft; the right wall is clear of the door swing and 14 cm clear of the right garden window." },
+    { id: "bunk-sk2", label: "Bunk bed (stapelbed) 90x200", x: 0, y: 621, w: 90, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false, note: "Against the left party wall and the bathroom wall: clear of the door swing and away from the window (top bunk does not block it)." },
+    { id: "desk-sk2", label: "Kids desk 100x50", x: 162, y: 932, w: 100, d: 50, rotation: 0, color: "#a3c4dc", shape: "rect" },
+    { id: "play-sk2", label: "Play rug / toy space", x: 100, y: 760, w: 140, d: 120, rotation: 0, color: "#f2e3a6", shape: "rect", solid: false },
+    { id: "desk-sk3", label: "Desk 120x90", x: 352, y: 892, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false, note: "Facing the street window." },
+    { id: "chair-sk3", label: "Office chair zone 70", x: 372, y: 822, w: 80, d: 70, rotation: 0, color: "#dfe9f1", shape: "rect", solid: false, measure: true, zones: false },
+    { id: "books-sk3", label: "Bookcase 130x30", x: 270, y: 850, w: 30, d: 130, rotation: 0, color: "#b8a48a", shape: "rect" }
+  ],
+  defaultLayout: "bath-instead-of-shower",
   layouts: [
-    { id: "bedrooms", label: "Default: master bed 160x200 + 2 small bedrooms", notes: [
-      "Master: 160x200 bed with the headboard on the left party wall, between the two windows' sight lines; 45x40 bedside tables; 250 cm wardrobe (60 deep) on the right party wall.",
-      "Slaapkamer 2: 140x200 bed against the left wall (clear of the door swing) and a 120x60 desk on the street wall next to the window.",
-      "Slaapkamer 3 (5.8 m2): 90x200 bed on the right party wall and a 120x60 desk on the left wall - a study/guest room more than a full bedroom."
+    { id: "bath-instead-of-shower", label: "Bath 170x75 instead of the shower (washer/dryer stays)", notes: [
+      "Bath 170x75 along the bathroom/bedroom-2 wall where the shower was (x 0-170); washer/dryer stack stays on its drawn spot (11 cm gap to the bath). Shower over the bath (screen + mixer) if you still want to shower.",
+      "70 cm free between the WC front and the bath; 97 cm between the basin and the bath.",
+      "180x80 does NOT fit with the washer/dryer where it is (would need x 0-180, the stack starts at 181). It fits only if the wd/wm connections move ~20 cm towards the landing wall (stack at x 202-262): ask UBA."
     ], items: [
-      { id: "bed-sk1", label: "Bed 160x200", x: 0, y: 95, w: 200, d: 160, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
-      { id: "nst-sk1-a", label: "Bedside", x: 0, y: 50, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
-      { id: "nst-sk1-b", label: "Bedside", x: 0, y: 255, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
-      { id: "wardrobe-sk1", label: "Wardrobe 250", x: 454, y: 50, w: 60, d: 250, rotation: 0, color: "#b8a48a", shape: "rect", measure: true, zones: false },
-      { id: "bed-sk2", label: "Bed 140x200", x: 0, y: 621, w: 140, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
-      { id: "desk-sk2", label: "Desk 120x60", x: 142, y: 922, w: 120, d: 60, rotation: 0, color: "#a3c4dc", shape: "rect" },
-      { id: "bed-sk3", label: "Bed 90x200", x: 424, y: 745, w: 90, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
-      { id: "desk-sk3", label: "Desk 120x60", x: 270, y: 862, w: 60, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false }
+      { id: "bath", label: "Bath 170x75", x: 0, y: 535, w: 170, d: 75, rotation: 0, color: "#cfe3f2", shape: "rect", measure: true, zones: false },
+      { id: "wdwm", label: "Washer/dryer stack 60x60", x: 181, y: 545, w: 60, d: 60, rotation: 0, color: "#e0e0e0", shape: "rect" }
+    ]},
+    { id: "bath-instead-of-washer", label: "Bath 160x70 instead of the washer/dryer (shower stays)", notes: [
+      "Only 171.5 cm between the shower (90x90 in the left corner) and the landing wall, before tiling (~168 after). A 170 bath is on the limit and will not fit after tiling; realistic: 160x70 (shown, x 102-262) or 165x70.",
+      "Washer/dryer stack (60x60, stacked) moves to the techniek room, against the bedroom-3 wall (x 386-446, y 677-737). Free floor there is ~71 x 94 cm; the stack fits but leaves only ~33 cm to the manifold and ~11 cm to the WTW side, so WTW filter/manifold access gets cramped. Needs cold water, a drain (WTW condensate drain is there) and a socket: ask UBA. Use a heat-pump/condenser dryer (no vent).",
+      "Other spots checked: landing (108 wide) leaves under 50 cm to pass - no; master bedroom corner next to the pipe shaft or a wardrobe module would work technically (water/drain from the shaft) but puts laundry noise in the bedroom."
+    ], items: [
+      { id: "bath", label: "Bath 160x70", x: 102.5, y: 540, w: 160, d: 70, rotation: 0, color: "#cfe3f2", shape: "rect", measure: true, zones: false },
+      { id: "shower", label: "Shower 90x90", x: 0, y: 520, w: 91, d: 90, rotation: 0, color: "#e8f1f7", shape: "rect" },
+      { id: "wdwm", label: "Washer/dryer stack 60x60", x: 386, y: 677, w: 60, d: 60, rotation: 0, color: "#e0e0e0", shape: "rect", measure: true, zones: false, note: "Moved to the techniek room in this variant." }
     ]}
   ]
 };
