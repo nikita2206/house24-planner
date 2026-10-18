@@ -26,8 +26,8 @@ async def main():
         g = im.convert("L").point(lambda v: 0 if v > 245 else 255); bb = g.getbbox(); return im.crop(bb)
     ims = [trim(i) for i in ims]
     w = max(i.width for i in ims); h = max(i.height for i in ims); pad = 30; title = 50
-    titles = ["1a  L at garden end · tall units at street end", "1b  L at garden end · storage tall at leg end",
-              "2a  L at street end · storage tall at garden end", "2b  L at street end · storage tall past the corner"]
+    titles = ["1a  L at living-room end · tall units at front end", "1b  L at living-room end · storage tall at leg end",
+              "2a  L at front (garden) end · storage tall at living-room end", "2b  L at front (garden) end · storage tall past the corner"]
     canvas = Image.new("RGB", (2 * w + 3 * pad, 2 * (h + title) + 3 * pad), "white")
     d = ImageDraw.Draw(canvas)
     try: f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
