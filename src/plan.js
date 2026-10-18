@@ -1,6 +1,9 @@
 // House 24 (EASE Amsterdam, Parkrand woning) - floor planner config: ground floor (top level) + firstFloor (below).
-// Units: cm. Origin (0,0) = inside face of the back (garden) facade x inside face of the left party wall.
-// x grows to the right (towards the hallway side), y grows towards the street (front door).
+// Units: cm. Origin (0,0) = inside face of the back facade (achtergevel, living room, TERRACE side) x inside face of the left party wall.
+// x grows to the right (towards the hallway side), y grows towards the front facade (voorgevel: front door, kitchen/dining,
+// opening onto the front GARDEN; the shed (berging) and the shared path/street are beyond the garden).
+// Orientation checked 18-10-2026 against VK-B02-24 (terrace strip + "hekwerk 1000" at the woonkamer side; ~6-7 m garden,
+// gate, brievenbus and berging beyond the voorgevel) and the elevations VK-B02-GVL ("Voorgevel" = front door side).
 // Source: [ext] House 24 - Sales Drawing (Verkooptekening VK-B02-24), 1:50, dated 16-07-2026.
 // Measured from the PDF vectors (scale checked: 5140 and 9820 dimension lines match within 2 mm).
 // The drawing says dimensions are indicative and EXCLUDE wall finish (plaster/tiles): expect ~1-2 cm less per wall.
@@ -13,16 +16,20 @@ window.PLAN = {
     title: "House 24 - Ground floor (begane grond)",
     subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
     source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
-    version: "v4 - 2026-10-18 (first floor: bath layouts)",
+    version: "v5 - 2026-10-18 (orientation fix + B102 French doors)",
     notes: [
       "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
-      "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm."
+      "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm.",
+      "Orientation: top = back facade (achtergevel) with the living room and the small terrace (~1.4 m deep, 1 m railing); bottom = front facade (voorgevel) with the front door and the kitchen/dining frame, opening onto the front garden (~6-7 m, then gate, berging and the shared path).",
+      "B102 (signed construction contract, EUR 1,760): the standard kitchen/dining frame in the voorgevel (fixed glass + one outward door, x 64-256) becomes a frame with double French doors: 2 leaves of ~91 cm opening OUT into the garden (option drawing VK-F-O3). Keep ~80 cm clear inside in front of them (green dashed zone)."
     ]
   },
   view: { margin: 70, grid: 50, gridMajor: 100 },
   // Hypothetical: remove the wall (and door) between the entrance hall (gang) and the kitchen/dining area.
   // Toggle in the sidebar or with #...&wall=off. Toilet / trapkast / meter cupboard block stays. Needs builder (UBA) approval.
   hallWall: { removed: false, note: "Hypothetical: hall wall removed (dashed). Needs UBA approval - check structure, ventilation/fire rules and that the front door then opens straight into the living space." },
+  // Labels drawn outside the top (y < 0) and bottom (y > depth) facades, and the names used in the clearance table.
+  sides: { top: "TERRACE (back, achtergevel)", bottom: "GARDEN (front, voorgevel) - front door; berging + path beyond", up: "↑ to terrace side", down: "↓ to garden side" },
   clearance: { min: 90, good: 100, comfort: 120, zones: [90, 120] },
 
   // Rooms: floor polygons (drawn as fills + labels)
@@ -52,13 +59,16 @@ window.PLAN = {
   ],
 
   windows: [
-    { id: "win-back",  label: "garden glazing (with door)", x1: 74, y1: 0, x2: 442, y2: 0 },
-    { id: "win-front", label: "front window", x1: 63, y1: 982, x2: 258, y2: 982 }
+    { id: "win-back",  label: "terrace glazing (with terrace door)", x1: 74, y1: 0, x2: 442, y2: 0 },
+    { id: "win-b102",  label: "B102 French door frame (glazed, voorgevel)", x1: 64, y1: 982, x2: 256, y2: 982 }
+    // Standard (without B102): fixed glass x 64-156 + one outward door x 156-253 (hinge right, ~93 wide).
   ],
 
   // Doors: hinge point, leaf width, closed and open angle (deg; 0 = +x/right, 90 = +y/down, 180 = left, 270 = up)
   doors: [
-    { id: "door-garden",  label: "garden door", hinge: [79, 0], width: 97, closed: 0, open: 90 },
+    { id: "door-terrace", label: "terrace door (living room)", hinge: [79, 0], width: 97, closed: 0, open: 90 },
+    { id: "b102-left",  label: "B102 French door, left leaf (opens out to the garden)", hinge: [68.6, 1012], width: 91, closed: 0, open: 90, gap: false },
+    { id: "b102-right", label: "B102 French door, right leaf (opens out to the garden)", hinge: [251, 1012], width: 91, closed: 180, open: 90, gap: false },
     { id: "door-trapkast",label: "trapkast door (swings into kitchen)", hinge: [328.5, 523], width: 92, closed: 90, open: 180 },
     { id: "door-hall",    label: "kitchen-hall door", hinge: [328.5, 844], width: 89, closed: 270, open: 180, removable: "hall" },
     { id: "door-front",   label: "front door", hinge: [451, 982], width: 104, closed: 180, open: 270 },
@@ -70,7 +80,9 @@ window.PLAN = {
     { id: "wtw-hatch",     label: "WTW inspection hatch (shower heat recovery)", labelAt: [-12, 394], labelRotate: -90, labelFill: "#fff", labelSize: 7, x: 0, y: 377, w: 47, d: 34, kind: "boxing", solid: true },
     { id: "stair",         label: "stair (open side)", x: 370, y: 374, w: 144, d: 107, kind: "stair", solid: true },
     { id: "core",          label: "trapkast / toilet / meterkast", x: 335.5, y: 488, w: 178.5, d: 242, kind: "core", solid: true },
-    { id: "heatpump",      label: "heat pump (wp)", x: 410, y: 545, w: 63, d: 55, kind: "appliance" },
+    { id: "heatpump",      label: "heat pump (wp)", x: 415, y: 554, w: 63, d: 62, kind: "appliance" },
+    { id: "ufh-gf",        label: "UFH manifold (vv)", x: 500, y: 449, w: 14, d: 43, kind: "appliance", labelAt: [490, 470], labelRotate: -90, labelSize: 6 },
+    { id: "b102-zone",     label: "keep clear for the B102 French doors (~80)", x: 64, y: 902, w: 192, d: 80, kind: "zone", solid: true, labelAt: [160, 945], labelSize: 8 },
     { id: "meterkast",     label: "Meter cupboard (mk)", x: 447, y: 730, w: 67, d: 88, kind: "appliance" }
   ],
 
@@ -100,7 +112,7 @@ window.PLAN = {
       { id: "k-run", label: "Worktop run 250", kind: "base", x: 0, y: 476, w: 60, d: 250 },
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
-      { id: "dining", label: "Dining table 120x90", x: 80, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
     { id: "island-A", label: "Standard + test island 200x90 (does not fit)", notes: ["268 cm between the run front and the toilet/trapkast wall; a 90 cm island needs 280 (min) to 310 (comfortable)."], items: [
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
@@ -108,7 +120,7 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
       { id: "island-A", label: "Test island A", x: 180, y: 501, w: 90, d: 200, rotation: 0, color: "#d9a066", shape: "rect", measure: true, note: "200x90 with 120 cm cook-side walkway: only 58 cm left to the toilet wall" },
-      { id: "dining", label: "Dining table 120x90", x: 80, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
     { id: "island-B", label: "Standard + slim island 180x75 (min. fit)", notes: ["Largest island that keeps 100 cm to the run and clears the trapkast door: about 180-240 x 75 cm."], items: [
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
@@ -116,7 +128,7 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
       { id: "island-B", label: "Slim island B", x: 160, y: 530, w: 75, d: 180, rotation: 0, color: "#7fb069", shape: "rect", measure: true, note: "100 cm to the run, ~93 cm behind, just clears the trapkast door" },
-      { id: "dining", label: "Dining table 120x90", x: 80, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
     { id: "island-C", label: "Standard + island 240x100 (does not fit)", notes: ["Leaves ~49 cm behind the island."], items: [
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
@@ -124,13 +136,13 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
       { id: "island-C", label: "Island C", x: 180, y: 486, w: 100, d: 240, rotation: 0, color: "#c97b63", shape: "rect", measure: true },
-      { id: "dining", label: "Dining table 120x90", x: 80, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
-    { id: "L-garden-tall-opposite", label: "1a: L at garden end, tall units at street end", notes: [
-      "Return leg at the garden-side end (y 416-476), 215 cm from the wall (155 beyond the run), 60 deep: forms a peninsula facing the living room/garden.",
-      "Fridge/oven tall unit moves to the street end; extra 60 cm storage tall unit next to it (run extends 60 cm into the front zone).",
-      "Sink moves onto the leg (view to the garden) with the dishwasher under it: needs a drain in the ground-floor slab (no crawlspace) - must be fixed before pouring. Hob moves ~40 cm towards the street (y 530-588) for landing space next to the corner.",
-      "30 cm overhang on the garden side = breakfast bar for 2-3 stools. The WTW inspection box stays free on the wall just behind the stools."
+    { id: "L-garden-tall-opposite", label: "1a: L at the living-room (terrace) end, tall units at the front (garden) end", notes: [
+      "Return leg at the living-room end (y 416-476, towards the terrace side), 215 cm from the wall (155 beyond the run), 60 deep: forms a peninsula facing the living room and the terrace glazing. (Earlier versions called this the 'garden end' - wrong: the garden is at the front.)",
+      "Fridge/oven tall unit moves to the front (garden/dining) end; extra 60 cm storage tall unit next to it (run extends 60 cm into the dining zone).",
+      "Sink moves onto the leg (view to the living room / terrace) with the dishwasher under it: needs a drain in the ground-floor slab (no crawlspace) - must be fixed before pouring. Hob moves ~40 cm towards the front (y 530-588) for landing space next to the corner.",
+      "30 cm overhang on the living-room side = breakfast bar for 2-3 stools. The WTW inspection box stays free on the wall just behind the stools."
     ], items: [
       { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 416, w: 60, d: 250 },
       { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 416, w: 155, d: 60, measure: true, band: 70, zones: false },
@@ -139,12 +151,12 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 530, w: 50, d: 58 },
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 666, w: 60, d: 60 },
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
-      { id: "dining", label: "Dining table 120x90", x: 90, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
-    { id: "L-garden-tall-corner", label: "1b: L at garden end, storage tall at the leg end", notes: [
+    { id: "L-garden-tall-corner", label: "1b: L at the living-room (terrace) end, storage tall at the leg end", notes: [
       "Same L as 1a, but the 60 cm storage tall unit closes the end of the return leg (acts as a room divider); leg worktop 95 cm.",
-      "Fridge/oven tall unit at the street end of the run; sink on the leg (slab drain needed), hob on the wall.",
-      "The tall unit at the leg end blocks part of the view/light from the kitchen to the garden; breakfast bar only 95 cm (2 stools)."
+      "Fridge/oven tall unit at the front (garden) end of the run; sink on the leg (slab drain needed), hob on the wall.",
+      "The tall unit at the leg end blocks part of the view/light from the kitchen to the living room and terrace glazing; breakfast bar only 95 cm (2 stools)."
     ], items: [
       { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 416, w: 60, d: 250 },
       { id: "k-leg", label: "Return leg 95", kind: "base", x: 60, y: 416, w: 95, d: 60, zones: false },
@@ -153,12 +165,13 @@ window.PLAN = {
       { id: "k-sink", label: "Sink", kind: "sink", x: 90, y: 423, w: 55, d: 45 },
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 530, w: 50, d: 58 },
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 666, w: 60, d: 60 },
-      { id: "dining", label: "Dining table 120x90", x: 90, y: 810, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
-    { id: "L-street-tall-opposite", label: "2a: L at street end, storage tall at garden end", notes: [
-      "Return leg at the street-side end (y 666-726), 215 cm from the wall, 60 deep: separates the kitchen from the dining zone at the front window.",
+    { id: "L-street-tall-opposite", label: "2a: L at the front (garden) end, storage tall at the living-room end", notes: [
+      "With the B102 French doors the dining table is turned lengthwise to keep ~80 cm in front of the doors: that leaves only ~56 cm between the end of the leg and the table (tight walkway).",
+      "Return leg at the front end (y 666-726), 215 cm from the wall, 60 deep: separates the kitchen from the dining zone at the B102 French doors.",
       "Fridge/oven tall unit stays; the storage tall unit goes right next to it (y 476-536) because the WTW box blocks the wall above it. Wall worktop 190 incl. corner.",
-      "Hob moves to y 572-630, sink onto the leg (slab drain needed). No bar overhang: it would push the dining table against the front facade."
+      "Hob moves to y 572-630, sink onto the leg (slab drain needed). No bar overhang: it would push the dining table into the B102 door zone."
     ], items: [
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 476, w: 60, d: 60, measure: true, zones: false },
@@ -166,13 +179,14 @@ window.PLAN = {
       { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 666, w: 155, d: 60, measure: true, band: 30, zones: false },
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 572, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 112, y: 674, w: 60, d: 45 },
-      { id: "dining", label: "Dining table 120x90", x: 90, y: 805, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
-    { id: "L-street-tall-corner", label: "2b: L at street end, storage tall next to the corner", notes: [
-      "Return leg at the street-side end (y 666-726), 215 cm from the wall. Fridge/oven tall unit and hob stay exactly as in the standard kitchen.",
+    { id: "L-street-tall-corner", label: "2b: L at the front (garden) end, storage tall next to the corner", notes: [
+      "With the B102 French doors the dining table is turned lengthwise to keep ~80 cm in front of the doors: that leaves only ~56 cm between the end of the leg and the table (tight walkway).",
+      "Return leg at the front end (y 666-726), 215 cm from the wall. Fridge/oven tall unit and hob stay exactly as in the standard kitchen.",
       "Sink moves ~65 cm along the same wall (y 590-650) out of the corner: short drain move, no slab drain under the leg needed.",
       "Storage tall unit on the left wall just past the corner (y 726-786), opening towards the dining table (pantry/dining storage).",
-      "No bar overhang (dining zone too shallow); the leg faces the dining area, not the garden."
+      "No bar overhang (dining zone too shallow); the leg faces the dining area and the French doors to the garden."
     ], items: [
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
       { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 476, w: 60, d: 250 },
@@ -180,12 +194,12 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 590, w: 45, d: 60 },
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
-      { id: "dining", label: "Dining table 120x90", x: 90, y: 805, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]}
   ]
 };
 
-// FIRST FLOOR (eerste verdieping). Same origin, axes and scale as the ground floor (0,0 = inside corner garden facade /
+// FIRST FLOOR (eerste verdieping). Same origin, axes and scale as the ground floor (0,0 = inside corner back/terrace facade /
 // left party wall, 514 x 982 inside). Measured from the PDF vectors of VK-B02-24 and cross-checked with the drawing's
 // dimension strings: 5140 / 3745 (slaapkamer 1) / 2625 x 2265 (badkamer) / 1085 x 3560 (overloop) / 2390 (stair) /
 // 1290 x 1100 (techniek) / 2625 x 3610 (slaapkamer 2) / 2445 x 2375 (slaapkamer 3). Interior walls 70 mm, bathroom walls 100 mm.
@@ -278,7 +292,7 @@ window.PLAN.firstFloor = {
     { id: "bunk-sk2", label: "Bunk bed (stapelbed) 90x200", x: 0, y: 621, w: 90, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false, note: "Against the left party wall and the bathroom wall: clear of the door swing and away from the window (top bunk does not block it)." },
     { id: "desk-sk2", label: "Kids desk 100x50", x: 162, y: 932, w: 100, d: 50, rotation: 0, color: "#a3c4dc", shape: "rect" },
     { id: "play-sk2", label: "Play rug / toy space", x: 100, y: 760, w: 140, d: 120, rotation: 0, color: "#f2e3a6", shape: "rect", solid: false },
-    { id: "desk-sk3", label: "Desk 120x90", x: 352, y: 892, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false, note: "Facing the street window." },
+    { id: "desk-sk3", label: "Desk 120x90", x: 352, y: 892, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false, note: "Facing the front window (over the garden)." },
     { id: "chair-sk3", label: "Office chair zone 70", x: 372, y: 822, w: 80, d: 70, rotation: 0, color: "#dfe9f1", shape: "rect", solid: false, measure: true, zones: false },
     { id: "books-sk3", label: "Bookcase 130x30", x: 270, y: 850, w: 30, d: 130, rotation: 0, color: "#b8a48a", shape: "rect" }
   ],

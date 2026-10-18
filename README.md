@@ -1,7 +1,7 @@
 # House 24 floor planner
 
 2D top-view planner for the ground floor (begane grond) and first floor (eerste verdieping) of House 24 (Parkrand woning, bouwnummer 24).
-Units in cm; origin = inside corner of the garden facade and the left party wall. Source: sales drawing VK-B02-24 (1:50, 16-07-2026), dimensions indicative and excluding wall finish.
+Units in cm; origin = inside corner of the back facade (achtergevel: living room + terrace) and the left party wall; y grows towards the front facade (voorgevel: front door, kitchen/dining with the B102 French doors, front garden). Source: sales drawing VK-B02-24 (1:50, 16-07-2026), dimensions indicative and excluding wall finish.
 
 - Live page: https://nikita2206.github.io/house24-planner/ (first floor: https://nikita2206.github.io/house24-planner/#floor=1)
 - First floor layouts: `#floor=1&layout=bath-instead-of-shower` (default) and `#floor=1&layout=bath-instead-of-washer`

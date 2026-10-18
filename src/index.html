@@ -83,7 +83,7 @@
   <h2>Config</h2>
   <button id="btnExport">Export config</button><button id="btnDownload">Download plan.js</button><button id="btnReset">Reset</button>
   <textarea id="out" style="display:none" spellcheck="false"></textarea>
-  <p class="note">Keys: arrows move the selected item 1 cm (Shift = 10 cm), R rotates 90&deg;, H hides it. Units: cm, origin = inside corner garden facade / left party wall.</p>
+  <p class="note">Keys: arrows move the selected item 1 cm (Shift = 10 cm), R rotates 90&deg;, H hides it. Units: cm, origin = inside corner of the back (terrace) facade / left party wall.</p>
   <p class="note" id="source"></p>
 </aside>
 <script>
@@ -213,7 +213,10 @@
     svg.innerHTML = "";
     const m = P.view.margin;
     const [W, D] = size();
-    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70}`);
+    const SD = F().sides || P.sides || { top: "BACK", bottom: "FRONT" };
+    // extra room below the plan for doors that swing outwards past the front facade (e.g. B102 French doors)
+    const outBelow = Math.max(0, ...F().doors.filter(d => d.hinge[1] > D).map(d => d.hinge[1] + d.width - D - 40));
+    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70 + outBelow}`);
     const defs = el("defs", {}, svg);
     const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
     el("line", { x1: 0, y1: 0, x2: 0, y2: 8, stroke: "#999", "stroke-width": 1.5 }, hatch);
@@ -239,8 +242,9 @@
 
     // fixed
     F().fixed.forEach(f => {
-      const fill = { kitchen: "#d7d2c8", stair: "url(#hatch)", core: "none", boxing: "#cfcfcf", appliance: "none" }[f.kind] || "#ddd";
+      const fill = { kitchen: "#d7d2c8", stair: "url(#hatch)", core: "none", boxing: "#cfcfcf", appliance: "none", zone: "#e3f1da" }[f.kind] || "#ddd";
       if (f.kind === "core") return;
+      if (f.kind === "zone") { el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, "fill-opacity": 0.6, stroke: "#4a7a3a", "stroke-width": 1, "stroke-dasharray": "5 3" }, svg); return; }
       el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, stroke: "#555", "stroke-width": f.kind === "appliance" ? 0.8 : 1.2, "stroke-dasharray": f.kind === "appliance" ? "3 2" : "" }, svg);
       if (f.shape === "hob") [[0.3, 0.25], [0.7, 0.25], [0.3, 0.72], [0.7, 0.72]].forEach(([a, b]) => el("circle", { cx: f.x + a * f.w, cy: f.y + b * f.d, r: 9, fill: "none", stroke: "#555", "stroke-width": 0.8 }, svg));
       if (f.shape === "sink") el("rect", { x: f.x + 6, y: f.y + 8, width: f.w - 12, height: f.d - 16, rx: 6, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, svg);
@@ -276,13 +280,13 @@
     F().fixed.forEach(f => {
       if (f.kind === "appliance" && f.shape) return;
       if (f.kind === "core") return;
-      if (f.labelAt) { txt(f.labelAt[0], f.labelAt[1], f.label, { size: f.labelSize || 8, fill: f.labelFill || "#333", anchor: "middle", rotate: f.labelRotate || 0 }); return; }
+      if (f.labelAt) { txt(f.labelAt[0], f.labelAt[1], f.label, { size: f.labelSize || 8, fill: f.labelFill || (f.kind === "zone" ? "#3d6b2f" : "#333"), anchor: "middle", rotate: f.labelRotate || 0 }); return; }
       if (f.d > f.w * 1.5) { txt(f.x + f.w / 2, f.y + f.d / 2, f.label, { size: 9, fill: "#333", anchor: "middle", rotate: -90 }); return; }
       const parts = f.label.length * 4.6 > f.w && f.label.includes(" (") ? [f.label.slice(0, f.label.indexOf(" (")), f.label.slice(f.label.indexOf(" (") + 1)] : [f.label];
       parts.forEach((t, i) => txt(f.x + f.w / 2, f.y + f.d / 2 + 3 + (i - (parts.length - 1) / 2) * 10, t, { size: 8.5, fill: "#333", anchor: "middle" }));
     });
-    txt(W / 2, -48, "GARDEN (back)", { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
-    txt(W / 2, D + 58, "STREET (front)", { size: 12, fill: "#666", anchor: "middle", weight: 700 });
+    txt(W / 2, -48, SD.top, { size: 12, fill: "#8a6a3a", anchor: "middle", weight: 700 });
+    txt(W / 2, D + 58 + outBelow, SD.bottom, { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
 
     // dims
     F().dims.forEach(dm => dim(dm.from, dm.to, dm.label));
@@ -322,7 +326,7 @@
     });
 
     // scale bar
-    const sb = el("g", { transform: `translate(0, ${D + 62})` }, svg);
+    const sb = el("g", { transform: `translate(0, ${D + 72 + outBelow})` }, svg);
     for (let i = 0; i < 3; i++) el("rect", { x: i * 100, y: 0, width: 100, height: 8, fill: i % 2 ? "#fff" : "#333", stroke: "#333", "stroke-width": 1 }, sb);
     [0, 100, 200, 300].forEach(v => txt(v, 22, v === 300 ? "3 m" : String(v / 100), { size: 10, anchor: "middle", parent: sb }));
     txt(320, 8, "scale (cm grid: 50 light / 100 dark)", { size: 9, fill: "#777", parent: sb });
@@ -501,7 +505,8 @@
     const cl = document.getElementById("clear"); cl.innerHTML = "";
     const measured = items().filter(i => !i.hidden && i.measure);
     if (!measured.length) cl.innerHTML = '<span class="note">Tick an island (or set measure:true) to see clearances.</span>';
-    const names = { left: "← left", right: "→ right", up: "↑ to garden side", down: "↓ to street side" };
+    const SDn = F().sides || P.sides || {};
+    const names = { left: "← left", right: "→ right", up: SDn.up || "↑ up", down: SDn.down || "↓ down" };
     measured.forEach(i => {
       const { gaps: gs } = gaps(i);
       let h = `<b>${i.label}</b> <span class="note">${i.w}×${i.d}</span><table class="m">`;
