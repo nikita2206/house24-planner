@@ -1,4 +1,4 @@
-// House 24 (EASE Amsterdam, Parkrand woning) - ground floor planner config.
+// House 24 (EASE Amsterdam, Parkrand woning) - floor planner config: ground floor (top level) + firstFloor (below).
 // Units: cm. Origin (0,0) = inside face of the back (garden) facade x inside face of the left party wall.
 // x grows to the right (towards the hallway side), y grows towards the street (front door).
 // Source: [ext] House 24 - Sales Drawing (Verkooptekening VK-B02-24), 1:50, dated 16-07-2026.
@@ -13,7 +13,7 @@ window.PLAN = {
     title: "House 24 - Ground floor (begane grond)",
     subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
     source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
-    version: "v2 - 2026-10-18 (layouts)",
+    version: "v3 - 2026-10-18 (first floor)",
     notes: [
       "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
       "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm."
@@ -181,6 +181,110 @@ window.PLAN = {
       { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 590, w: 45, d: 60 },
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
       { id: "dining", label: "Dining table 120x90", x: 90, y: 805, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false }
+    ]}
+  ]
+};
+
+// FIRST FLOOR (eerste verdieping). Same origin, axes and scale as the ground floor (0,0 = inside corner garden facade /
+// left party wall, 514 x 982 inside). Measured from the PDF vectors of VK-B02-24 and cross-checked with the drawing's
+// dimension strings: 5140 / 3745 (slaapkamer 1) / 2625 x 2265 (badkamer) / 1085 x 3560 (overloop) / 2390 (stair) /
+// 1290 x 1100 (techniek) / 2625 x 3610 (slaapkamer 2) / 2445 x 2375 (slaapkamer 3). Interior walls 70 mm, bathroom walls 100 mm.
+// Shown with the "First floor" tab or #floor=1. Same item/layout format as the ground floor.
+window.PLAN.firstFloor = {
+  meta: {
+    title: "House 24 - First floor (eerste verdieping)",
+    subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
+    source: "VK-B02-24 sales drawing 1:50 (16-07-2026), first floor. Indicative dimensions, excl. wall finish.",
+    notes: [
+      "Room sizes (inside, excl. finish): slaapkamer 1 514 x 374 (19.2 m2), slaapkamer 2 262 x 361 (9.5 m2), slaapkamer 3 244 x 238 (5.8 m2), badkamer 262 x 226 (5.9 m2), overloop 108 x 356, techniek 128 x 110.",
+      "Sanitary, WTW and manifold positions are copied from the sales drawing symbols; sizes are approximate (not dimensioned on the drawing).",
+      "Door leaves ~92 cm, positions read from the drawing (not dimensioned). Bathroom and techniek doors swing into the landing."
+    ]
+  },
+  size: [514, 982],
+  rooms: [
+    { id: "sk1", label: "Slaapkamer 1 (master)", fill: "#f7f4ee", points: [[0,0],[514,0],[514,374.4],[0,374.4]], labelAt: [330, 160] },
+    { id: "bath", label: "Badkamer", fill: "#eef3f7", points: [[0,384.6],[262.5,384.6],[262.5,610],[0,610]], labelAt: [130, 495] },
+    { id: "landing", label: "Overloop", fill: "#f3f0ea", points: [[269.7,381.4],[378.2,381.4],[378.2,737.4],[269.7,737.4]], labelAt: [324, 600] },
+    { id: "tech", label: "Techniek", fill: "#eeeeee", points: [[385.9,627.6],[514,627.6],[514,737.4],[385.9,737.4]], labelAt: [430, 725] },
+    { id: "sk2", label: "Slaapkamer 2", fill: "#f7f4ee", points: [[0,621],[262.5,621],[262.5,982],[0,982]], labelAt: [190, 880] },
+    { id: "sk3", label: "Slaapkamer 3", fill: "#f7f4ee", points: [[269.7,744.6],[514,744.6],[514,982],[269.7,982]], labelAt: [377, 845] }
+  ],
+  walls: [
+    { id: "party-left",  label: "party wall", x: -25, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "party-right", label: "party wall", x: 514, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "facade-back", label: "back facade", x: 0, y: -30, w: 514, d: 30, kind: "facade" },
+    { id: "facade-front",label: "front facade", x: 0, y: 982, w: 514, d: 30, kind: "facade" },
+    { id: "sk1-wall-a", label: "bedroom 1 / bathroom wall", x: 0, y: 374.4, w: 269.7, d: 10.2, kind: "inner" },
+    { id: "sk1-wall-b", label: "bedroom 1 wall", x: 269.7, y: 374.4, w: 5, d: 7, kind: "inner" },
+    { id: "sk1-wall-c", label: "bedroom 1 / stair wall", x: 366.5, y: 374.4, w: 147.5, d: 7, kind: "inner" },
+    { id: "bath-bottom", label: "bathroom / bedroom 2 wall", x: 0, y: 610, w: 262.5, d: 11, kind: "inner" },
+    { id: "mid-wall-a", label: "bathroom / landing wall", x: 262.5, y: 384.6, w: 7.2, d: 48.4, kind: "inner" },
+    { id: "mid-wall-b", label: "bathroom / landing wall", x: 262.5, y: 527, w: 7.2, d: 103, kind: "inner" },
+    { id: "mid-wall-c", label: "bedroom 2 wall", x: 262.5, y: 723, w: 7.2, d: 259, kind: "inner" },
+    { id: "tech-top", label: "stair / techniek wall", x: 378.2, y: 620, w: 135.8, d: 7.6, kind: "inner" },
+    { id: "tech-west-a", label: "techniek wall", x: 378.2, y: 620, w: 7.7, d: 11, kind: "inner" },
+    { id: "tech-west-b", label: "techniek wall", x: 378.2, y: 724, w: 7.7, d: 13.4, kind: "inner" },
+    { id: "sk3-wall-a", label: "bedroom 3 wall", x: 269.7, y: 737.4, w: 10.3, d: 7.2, kind: "inner" },
+    { id: "sk3-wall-b", label: "bedroom 3 / techniek wall", x: 372, y: 737.4, w: 142, d: 7.2, kind: "inner" }
+  ],
+  windows: [
+    { id: "win-sk1-l", label: "bedroom 1 window", x1: 74, y1: 0, x2: 181, y2: 0 },
+    { id: "win-sk1-r", label: "bedroom 1 window", x1: 334, y1: 0, x2: 440, y2: 0 },
+    { id: "win-sk2", label: "bedroom 2 window", x1: 63, y1: 982, x2: 170, y2: 982 },
+    { id: "win-sk3", label: "bedroom 3 window", x1: 344, y1: 982, x2: 450, y2: 982 }
+  ],
+  doors: [
+    { id: "door-sk1",  label: "bedroom 1 door", hinge: [274.7, 374.4], width: 92, closed: 0, open: 270, gap: false },
+    { id: "door-bath", label: "bathroom door (swings onto landing)", hinge: [269.7, 433], width: 94, closed: 90, open: 0, gap: false },
+    { id: "door-sk2",  label: "bedroom 2 door", hinge: [262.5, 630], width: 93, closed: 90, open: 180, gap: false },
+    { id: "door-tech", label: "techniek door (swings onto landing)", hinge: [378.2, 724], width: 93, closed: 270, open: 180, gap: false },
+    { id: "door-sk3",  label: "bedroom 3 door", hinge: [280, 744.6], width: 92, closed: 0, open: 90, gap: false }
+  ],
+  fixed: [
+    { id: "stair", label: "stair void (trapgat)", x: 380, y: 381.4, w: 134, d: 238.6, kind: "stair", solid: true },
+    { id: "railing", label: "stair railing (traphek)", x: 375.5, y: 381.4, w: 4.5, d: 238.6, kind: "boxing", solid: true, labelAt: [371, 470], labelRotate: -90, labelSize: 7 },
+    { id: "shaft", label: "pipe shaft", x: 0, y: 337, w: 25, d: 37.4, kind: "boxing", solid: true, labelAt: [32, 333], labelSize: 7 },
+    { id: "wc-wall", label: "WC pre-wall (voorzetwand)", x: 0, y: 384.6, w: 120, d: 25, kind: "boxing", solid: true, labelSize: 7, labelAt: [60, 400] },
+    { id: "wc", label: "WC", x: 57, y: 409.6, w: 43, d: 55, kind: "appliance" },
+    { id: "basin", label: "washbasin", x: 154, y: 384.6, w: 75, d: 48, kind: "appliance" },
+    { id: "shower", label: "shower ~90x90", x: 0, y: 520, w: 91, d: 90, kind: "appliance" },
+    { id: "wd-wm", label: "washer/dryer (wd/wm)", x: 181, y: 545, w: 60, d: 60, kind: "appliance" },
+    { id: "wtw", label: "WTW unit", x: 457, y: 637, w: 57, d: 64, kind: "appliance" },
+    { id: "ufh", label: "UFH manifold (vv)", x: 405, y: 627.6, w: 49, d: 16, kind: "appliance", labelAt: [430, 655], labelSize: 7 }
+  ],
+  dims: [
+    { from: [0, 30], to: [514, 30], label: "5140" },
+    { from: [-45, 0], to: [-45, 982], label: "9820" },
+    { from: [500, 0], to: [500, 374.4], label: "3745" },
+    { from: [0, 505], to: [262.5, 505], label: "2625" },
+    { from: [250, 384.6], to: [250, 610], label: "2265" },
+    { from: [269.7, 400], to: [378.2, 400], label: "1085" },
+    { from: [356, 381.4], to: [356, 737.4], label: "3560" },
+    { from: [500, 381.4], to: [500, 620], label: "2390" },
+    { from: [385.9, 712], to: [514, 712], label: "1290" },
+    { from: [394, 627.6], to: [394, 737.4], label: "1100" },
+    { from: [0, 905], to: [262.5, 905], label: "2625" },
+    { from: [248, 621], to: [248, 982], label: "3610" },
+    { from: [269.7, 790], to: [514, 790], label: "2445" },
+    { from: [404, 744.6], to: [404, 982], label: "2375" }
+  ],
+  furniture: [],
+  defaultLayout: "bedrooms",
+  layouts: [
+    { id: "bedrooms", label: "Default: master bed 160x200 + 2 small bedrooms", notes: [
+      "Master: 160x200 bed with the headboard on the left party wall, between the two windows' sight lines; 45x40 bedside tables; 250 cm wardrobe (60 deep) on the right party wall.",
+      "Slaapkamer 2: 140x200 bed against the left wall (clear of the door swing) and a 120x60 desk on the street wall next to the window.",
+      "Slaapkamer 3 (5.8 m2): 90x200 bed on the right party wall and a 120x60 desk on the left wall - a study/guest room more than a full bedroom."
+    ], items: [
+      { id: "bed-sk1", label: "Bed 160x200", x: 0, y: 95, w: 200, d: 160, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
+      { id: "nst-sk1-a", label: "Bedside", x: 0, y: 50, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+      { id: "nst-sk1-b", label: "Bedside", x: 0, y: 255, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+      { id: "wardrobe-sk1", label: "Wardrobe 250", x: 454, y: 50, w: 60, d: 250, rotation: 0, color: "#b8a48a", shape: "rect", measure: true, zones: false },
+      { id: "bed-sk2", label: "Bed 140x200", x: 0, y: 621, w: 140, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
+      { id: "desk-sk2", label: "Desk 120x60", x: 142, y: 922, w: 120, d: 60, rotation: 0, color: "#a3c4dc", shape: "rect" },
+      { id: "bed-sk3", label: "Bed 90x200", x: 424, y: 745, w: 90, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
+      { id: "desk-sk3", label: "Desk 120x60", x: 270, y: 862, w: 60, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false }
     ]}
   ]
 };

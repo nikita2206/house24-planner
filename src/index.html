@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>House 24 - Ground Floor Planner</title>
+<title>House 24 - Floor Planner</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
   :root { --ink:#222; --muted:#777; --panel:#f6f6f4; }
@@ -52,12 +52,16 @@
                  border:1px solid #bbb; background:#fff; box-shadow:0 2px 6px #0002; font-weight:600; }
   }
   .furn.sel rect, .furn.sel ellipse { stroke:#1565c0; stroke-width:2.5; }
+  #tabs { display:flex; gap:4px; margin-top:6px; }
+  #tabs button { margin:0; padding:5px 12px; border:1px solid #bbb; border-radius:16px; background:#fff; font-weight:600; color:#444; }
+  #tabs button.on { background:#1565c0; border-color:#1565c0; color:#fff; }
+  @media (max-width: 800px) { #tabs button { padding:6px 12px; } }
 </style>
 <script src="plan.js"></script>
 </head>
 <body>
 <div id="stage">
-  <header><h1 id="title"></h1><div class="sub" id="subtitle"></div></header>
+  <header><h1 id="title"></h1><div class="sub" id="subtitle"></div><div id="tabs" role="tablist"><button data-floor="0" role="tab">Ground floor</button><button data-floor="1" role="tab">First floor</button></div></header>
   <div id="svgwrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
 </div>
 <button id="btnDrawer" aria-controls="sidebar" aria-expanded="false">&#9776; Items</button>
@@ -65,7 +69,7 @@
 <aside id="sidebar">
   <h2>Layout</h2>
   <select id="layoutSel" style="width:100%;font:inherit;padding:4px"></select>
-  <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="wallChk"> Remove hall wall (hypothetical, needs builder approval)</label>
+  <label id="wallRow" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="wallChk"> Remove hall wall (hypothetical, needs builder approval)</label>
   <h2>Items <span class="note">(tick = shown, click = select, drag on plan)</span></h2>
   <div id="items"></div>
   <h2>Selected</h2>
@@ -89,12 +93,23 @@
   let P = JSON.parse(JSON.stringify(window.PLAN));
   let selId = null;
   const svg = document.getElementById("svg");
+  // Floors: 0 = ground floor (the top-level PLAN), 1 = PLAN.firstFloor (same schema). Each floor keeps its own layout choice.
+  let floor = 0;
+  const layoutIds = {};
+  const F = () => (floor === 1 && P.firstFloor) ? P.firstFloor : P;
+  const size = () => F().size || [514, 982];
   let layoutId = null;
-  const cur = () => (P.layouts || []).find(l => l.id === layoutId);
-  const items = () => [...((cur() || {}).items || []), ...P.furniture];
+  const cur = () => (F().layouts || []).find(l => l.id === layoutId);
+  const items = () => [...((cur() || {}).items || []), ...(F().furniture || [])];
   function pickLayout(id) {
-    const ls = P.layouts || [];
-    layoutId = ls.some(l => l.id === id) ? id : (ls.some(l => l.id === P.defaultLayout) ? P.defaultLayout : (ls[0] || {}).id);
+    const fl = F(), ls = fl.layouts || [];
+    layoutId = ls.some(l => l.id === id) ? id : (ls.some(l => l.id === fl.defaultLayout) ? fl.defaultLayout : (ls[0] || {}).id);
+    layoutIds[floor] = layoutId;
+  }
+  function setFloor(n) {
+    n = (n === 1 && P.firstFloor) ? 1 : 0;
+    if (n === floor && layoutId) return;
+    layoutIds[floor] = layoutId; floor = n; selId = null; pickLayout(layoutIds[floor]);
   }
 
   // URL hash: #show=id1,id2&hide=id3
@@ -103,6 +118,7 @@
     const show = (h.get("show") || "").split(",").filter(Boolean);
     const hide = (h.get("hide") || "").split(",").filter(Boolean);
     const only = (h.get("only") || "").split(",").filter(Boolean);
+    floor = h.get("floor") === "1" && P.firstFloor ? 1 : 0;
     pickLayout(h.get("layout"));
     if (h.get("wall") === "off") P.hallWall.removed = true;
     if (h.get("wall") === "on") P.hallWall.removed = false;
@@ -137,14 +153,14 @@
     const longX = (b.x1 - b.x0) >= (b.y1 - b.y0), ex = longX ? (c.ends || 0) : (c.sides || 0), ey = longX ? (c.sides || 0) : (c.ends || 0);
     return { x0: b.x0 - ex, y0: b.y0 - ey, x1: b.x1 + ex, y1: b.y1 + ey };
   }
-  const wallOff = () => !!(P.hallWall && P.hallWall.removed);
-  const liveWalls = () => P.walls.filter(w => !(w.removable && wallOff()));
-  const liveDoors = () => P.doors.filter(d => !(d.removable && wallOff()));
+  const wallOff = () => floor === 0 && !!(P.hallWall && P.hallWall.removed);
+  const liveWalls = () => F().walls.filter(w => !(w.removable && wallOff()));
+  const liveDoors = () => F().doors.filter(d => !(d.removable && wallOff()));
 
   function obstacles(selfId) {
     const list = [];
     liveWalls().forEach(w => list.push({ id: w.id, label: w.label, box: rectBox(w) }));
-    P.fixed.filter(f => f.solid).forEach(f => list.push({ id: f.id, label: f.label, box: rectBox(f) }));
+    F().fixed.filter(f => f.solid).forEach(f => list.push({ id: f.id, label: f.label, box: rectBox(f) }));
     items().filter(f => !f.hidden && f.id !== selfId && f.solid !== false && !["hob", "sink", "bar"].includes(f.kind)).forEach(f => list.push({ id: f.id, label: f.clearance ? f.label + " (chair zone)" : f.label, box: effBox(f) }));
     return list;
   }
@@ -196,7 +212,7 @@
   function render() {
     svg.innerHTML = "";
     const m = P.view.margin;
-    const W = 514, D = 982;
+    const [W, D] = size();
     svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70}`);
     const defs = el("defs", {}, svg);
     const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
@@ -213,7 +229,7 @@
     for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#eee" : "#ddd", "stroke-width": 0.6 }, g);
 
     // rooms
-    P.rooms.forEach(rm => {
+    F().rooms.forEach(rm => {
       el("polygon", { points: rm.points.map(p => p.join(",")).join(" "), fill: (rm.id === "gang" && wallOff()) ? "#fbf8f1" : (rm.fill || "#fafafa"), "fill-opacity": 0.85, stroke: "none" }, svg);
     });
     // regrid over rooms (light)
@@ -222,7 +238,7 @@
     for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#ececec" : "#d8d8d8", "stroke-width": 0.6 }, g2);
 
     // fixed
-    P.fixed.forEach(f => {
+    F().fixed.forEach(f => {
       const fill = { kitchen: "#d7d2c8", stair: "url(#hatch)", core: "none", boxing: "#cfcfcf", appliance: "none" }[f.kind] || "#ddd";
       if (f.kind === "core") return;
       el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, stroke: "#555", "stroke-width": f.kind === "appliance" ? 0.8 : 1.2, "stroke-dasharray": f.kind === "appliance" ? "3 2" : "" }, svg);
@@ -230,14 +246,15 @@
       if (f.shape === "sink") el("rect", { x: f.x + 6, y: f.y + 8, width: f.w - 12, height: f.d - 16, rx: 6, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, svg);
     });
     // walls
-    P.walls.forEach(w => {
+    F().walls.forEach(w => {
       if (w.removable && wallOff()) el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: "none", stroke: "#c62828", "stroke-width": 1, "stroke-dasharray": "4 3" }, svg);
       else el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: w.kind === "inner" ? "#888" : "#555", stroke: "none" }, svg);
     });
     // windows
-    P.windows.forEach(wn => {
-      el("line", { x1: wn.x1, y1: wn.y1 + (wn.y1 === 0 ? -15 : 15), x2: wn.x2, y2: wn.y2 + (wn.y2 === 0 ? -15 : 15), stroke: "#fff", "stroke-width": 26 }, svg);
-      [-22, -15, -8].forEach(o => { const s = wn.y1 === 0 ? 1 : -1; el("line", { x1: wn.x1, y1: wn.y1 + o * s, x2: wn.x2, y2: wn.y2 + o * s, stroke: "#4a90c2", "stroke-width": 1.2 }, svg); });
+    F().windows.forEach(wn => {
+      const out = wn.y1 <= 0 ? -1 : 1; // outward = towards the garden (y 0) or the street (y D)
+      el("line", { x1: wn.x1, y1: wn.y1 + 15 * out, x2: wn.x2, y2: wn.y2 + 15 * out, stroke: "#fff", "stroke-width": 26 }, svg);
+      [-22, -15, -8].forEach(o => { const s = -out; el("line", { x1: wn.x1, y1: wn.y1 + o * s, x2: wn.x2, y2: wn.y2 + o * s, stroke: "#4a90c2", "stroke-width": 1.2 }, svg); });
     });
     // doors
     liveDoors().forEach(dr => {
@@ -246,17 +263,17 @@
       const po = [hx + dr.width * Math.cos(rad(dr.open)), hy + dr.width * Math.sin(rad(dr.open))];
       const span = ((dr.open - dr.closed) % 360 + 540) % 360 - 180;
       // gap in wall
-      el("line", { x1: hx, y1: hy, x2: pc[0], y2: pc[1], stroke: "#fff", "stroke-width": dr.hinge[1] === 0 || dr.hinge[1] === 982 ? 0 : 9 }, svg);
+      el("line", { x1: hx, y1: hy, x2: pc[0], y2: pc[1], stroke: "#fff", "stroke-width": dr.gap === false || dr.hinge[1] === 0 || dr.hinge[1] === D ? 0 : 9 }, svg);
       dr._el = el("path", { d: `M${hx},${hy} L${po[0]},${po[1]} A${dr.width},${dr.width} 0 0 ${span > 0 ? 0 : 1} ${pc[0]},${pc[1]} Z`, fill: "#f0e6d0", "fill-opacity": 0.45, stroke: "#8a7a5a", "stroke-width": 0.9, "stroke-dasharray": "4 3" }, svg);
       el("line", { x1: hx, y1: hy, x2: po[0], y2: po[1], stroke: "#5a4a2a", "stroke-width": 2.2 }, svg);
     });
     // labels for rooms & fixed
-    P.rooms.forEach(rm => {
+    F().rooms.forEach(rm => {
       const xs = rm.points.map(p => p[0]), ys = rm.points.map(p => p[1]);
       const [lx, ly] = rm.labelAt || [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
       txt(lx, ly, rm.label, { size: 13, fill: "#999", anchor: "middle", weight: 600 });
     });
-    P.fixed.forEach(f => {
+    F().fixed.forEach(f => {
       if (f.kind === "appliance" && f.shape) return;
       if (f.kind === "core") return;
       if (f.labelAt) { txt(f.labelAt[0], f.labelAt[1], f.label, { size: f.labelSize || 8, fill: f.labelFill || "#333", anchor: "middle", rotate: f.labelRotate || 0 }); return; }
@@ -264,11 +281,11 @@
       const parts = f.label.length * 4.6 > f.w && f.label.includes(" (") ? [f.label.slice(0, f.label.indexOf(" (")), f.label.slice(f.label.indexOf(" (") + 1)] : [f.label];
       parts.forEach((t, i) => txt(f.x + f.w / 2, f.y + f.d / 2 + 3 + (i - (parts.length - 1) / 2) * 10, t, { size: 8.5, fill: "#333", anchor: "middle" }));
     });
-    txt(257, -48, "GARDEN (back)", { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
-    txt(257, 1040, "STREET (front)", { size: 12, fill: "#666", anchor: "middle", weight: 700 });
+    txt(W / 2, -48, "GARDEN (back)", { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
+    txt(W / 2, D + 58, "STREET (front)", { size: 12, fill: "#666", anchor: "middle", weight: 700 });
 
     // dims
-    P.dims.forEach(dm => dim(dm.from, dm.to, dm.label));
+    F().dims.forEach(dm => dim(dm.from, dm.to, dm.label));
 
     // clearance zones + furniture
     const measured = items().filter(f => !f.hidden && f.measure);
@@ -444,14 +461,18 @@
   }
 
   function renderPanel() {
-    document.getElementById("title").textContent = P.meta.title;
-    document.getElementById("subtitle").textContent = P.meta.subtitle + " · " + P.meta.version;
+    const fm = F().meta || P.meta;
+    document.getElementById("title").textContent = fm.title;
+    document.getElementById("subtitle").textContent = (fm.subtitle || P.meta.subtitle) + " · " + P.meta.version;
+    document.querySelectorAll("#tabs button").forEach(b => { const on = Number(b.dataset.floor) === floor; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+    document.getElementById("wallRow").style.display = floor === 0 && P.hallWall ? "flex" : "none";
     document.getElementById("wallChk").checked = wallOff();
-    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...((cur() || {}).notes || []), ...(P.meta.notes || [])].map(n => "<li>" + n + "</li>").join("");
+    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...((cur() || {}).notes || []), ...(fm.notes || [])].map(n => "<li>" + n + "</li>").join("");
     const ls = document.getElementById("layoutSel");
-    if (ls.options.length !== (P.layouts || []).length) ls.innerHTML = (P.layouts || []).map(l => `<option value="${l.id}">${l.label}</option>`).join("");
+    const lsKey = floor + ":" + (F().layouts || []).map(l => l.id).join(",");
+    if (ls.dataset.key !== lsKey) { ls.innerHTML = (F().layouts || []).map(l => `<option value="${l.id}">${l.label}</option>`).join(""); ls.dataset.key = lsKey; }
     ls.value = layoutId;
-    document.getElementById("source").textContent = "Source: " + P.meta.source;
+    document.getElementById("source").textContent = "Source: " + fm.source;
     const box = document.getElementById("items"); box.innerHTML = "";
     items().forEach(f => {
       const d = document.createElement("div"); d.className = "item" + (f.id === selId ? " sel" : "");
@@ -493,28 +514,41 @@
 
   // ---------- export ----------
   function serialize() {
-    const out = JSON.parse(JSON.stringify(P));
-    out.doors.forEach(d => delete d._el);
-    const head = "// House 24 ground floor planner config - exported " + new Date().toISOString().slice(0, 16) + "\n// One furniture item per line: x,y = top-left (cm), w along x, d along y.\nwindow.PLAN = ";
-    const furn = out.furniture, lays = out.layouts || [];
-    delete out.furniture; delete out.layouts;
-    let s = JSON.stringify(out, null, 2).replace(/\n}$/, "");
-    s += ',\n  "furniture": [\n' + furn.map(f => "    " + JSON.stringify(f)).join(",\n") + "\n  ]";
-    s += ',\n  "layouts": [\n' + lays.map(l => { const { items: it, ...rest } = l; const h = JSON.stringify(rest).replace(/}$/, ', "items": [\n'); return "    " + h + it.map(i => "      " + JSON.stringify(i)).join(",\n") + "\n    ]}"; }).join(",\n") + "\n  ]\n}";
-    return head + s + ";\n";
+    const clean = (k, v) => k === "_el" ? undefined : v;
+    const out = JSON.parse(JSON.stringify(P, clean));
+    const head = "// House 24 floor planner config - exported " + new Date().toISOString().slice(0, 16) + "\n// One furniture item per line: x,y = top-left (cm), w along x, d along y.\nwindow.PLAN = ";
+    const fmt = (o, ind) => { // pretty-print a floor object, one furniture/layout item per line
+      const furn = o.furniture || [], lays = o.layouts || [];
+      const rest = { ...o }; delete rest.furniture; delete rest.layouts; delete rest.firstFloor;
+      const pad = " ".repeat(ind);
+      let s = JSON.stringify(rest, null, 2).replace(/\n}$/, "").replace(/\n/g, "\n" + pad);
+      s += ',\n' + pad + '  "furniture": [\n' + furn.map(f => pad + "    " + JSON.stringify(f)).join(",\n") + "\n" + pad + "  ]";
+      s += ',\n' + pad + '  "layouts": [\n' + lays.map(l => { const { items: it, ...r } = l; const h = JSON.stringify(r).replace(/}$/, ', "items": [\n'); return pad + "    " + h + it.map(i => pad + "      " + JSON.stringify(i)).join(",\n") + "\n" + pad + "    ]}"; }).join(",\n") + "\n" + pad + "  ]";
+      return s;
+    };
+    let s = fmt(out, 0);
+    if (out.firstFloor) s += ',\n  "firstFloor": ' + fmt(out.firstFloor, 2) + "\n  }";
+    return head + s + "\n};\n";
   }
   document.getElementById("btnExport").onclick = () => { const t = document.getElementById("out"); t.style.display = "block"; t.value = serialize(); t.select(); console.log(t.value); };
   document.getElementById("btnDownload").onclick = () => {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([serialize()], { type: "text/javascript" })); a.download = "plan.js"; a.click();
   };
   document.getElementById("btnReset").onclick = () => { P = JSON.parse(JSON.stringify(ORIGINAL)); selId = null; pickLayout(layoutId); render(); };
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { setFloor(Number(b.dataset.floor)); syncHash(); render(); });
   document.getElementById("layoutSel").onchange = ev => {
     pickLayout(ev.target.value); selId = null;
     syncHash(); render();
   };
-  const syncHash = () => history.replaceState(null, "", "#layout=" + layoutId + (wallOff() ? "&wall=off" : ""));
+  const syncHash = () => history.replaceState(null, "", "#" + (floor === 1 ? "floor=1&" : "") + "layout=" + layoutId + (wallOff() ? "&wall=off" : ""));
   document.getElementById("wallChk").onchange = ev => { P.hallWall.removed = ev.target.checked; syncHash(); render(); };
-  window.addEventListener("hashchange", () => { const id = new URLSearchParams(location.hash.slice(1)).get("layout"); const hp = new URLSearchParams(location.hash.slice(1)); if (hp.get("wall")) P.hallWall.removed = hp.get("wall") === "off"; if (id && id !== layoutId) { pickLayout(id); selId = null; } render(); });
+  window.addEventListener("hashchange", () => {
+    const hp = new URLSearchParams(location.hash.slice(1)), id = hp.get("layout");
+    setFloor(hp.get("floor") === "1" ? 1 : 0);
+    if (hp.get("wall") && P.hallWall) P.hallWall.removed = hp.get("wall") === "off";
+    if (id && id !== layoutId) { pickLayout(id); selId = null; }
+    render();
+  });
 
   render();
 })();
