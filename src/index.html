@@ -32,6 +32,7 @@
   textarea { width:100%; height:220px; font: 11px/1.3 ui-monospace, Menlo, monospace; }
   .legend span { display:inline-block; margin-right:10px; }
   .note { color:var(--muted); font-size:12px; }
+  select { font: inherit; }
   .furn { cursor:move; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
   svg, header { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
   svg.dragging, body.dragging { touch-action:none; }
@@ -62,6 +63,9 @@
 <button id="btnDrawer" aria-controls="sidebar" aria-expanded="false">&#9776; Items</button>
 <div id="backdrop"></div>
 <aside id="sidebar">
+  <h2>Layout</h2>
+  <select id="layoutSel" style="width:100%;font:inherit;padding:4px"></select>
+  <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="wallChk"> Remove hall wall (hypothetical, needs builder approval)</label>
   <h2>Items <span class="note">(tick = shown, click = select, drag on plan)</span></h2>
   <div id="items"></div>
   <h2>Selected</h2>
@@ -85,6 +89,13 @@
   let P = JSON.parse(JSON.stringify(window.PLAN));
   let selId = null;
   const svg = document.getElementById("svg");
+  let layoutId = null;
+  const cur = () => (P.layouts || []).find(l => l.id === layoutId);
+  const items = () => [...((cur() || {}).items || []), ...P.furniture];
+  function pickLayout(id) {
+    const ls = P.layouts || [];
+    layoutId = ls.some(l => l.id === id) ? id : (ls.some(l => l.id === P.defaultLayout) ? P.defaultLayout : (ls[0] || {}).id);
+  }
 
   // URL hash: #show=id1,id2&hide=id3
   (function applyHash() {
@@ -92,7 +103,10 @@
     const show = (h.get("show") || "").split(",").filter(Boolean);
     const hide = (h.get("hide") || "").split(",").filter(Boolean);
     const only = (h.get("only") || "").split(",").filter(Boolean);
-    P.furniture.forEach(f => {
+    pickLayout(h.get("layout"));
+    if (h.get("wall") === "off") P.hallWall.removed = true;
+    if (h.get("wall") === "on") P.hallWall.removed = false;
+    items().forEach(f => {
       if (only.length) f.hidden = !only.includes(f.id);
       if (show.includes(f.id)) f.hidden = false;
       if (hide.includes(f.id)) f.hidden = true;
@@ -117,22 +131,31 @@
     return { x0: cx - hw, y0: cy - hd, x1: cx + hw, y1: cy + hd };
   }
   const rectBox = r => ({ x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.d });
+  // footprint incl. chair zone: clearance.sides on the long sides, clearance.ends on the short ends
+  function effBox(f) {
+    const b = aabb(f), c = f.clearance; if (!c) return b;
+    const longX = (b.x1 - b.x0) >= (b.y1 - b.y0), ex = longX ? (c.ends || 0) : (c.sides || 0), ey = longX ? (c.sides || 0) : (c.ends || 0);
+    return { x0: b.x0 - ex, y0: b.y0 - ey, x1: b.x1 + ex, y1: b.y1 + ey };
+  }
+  const wallOff = () => !!(P.hallWall && P.hallWall.removed);
+  const liveWalls = () => P.walls.filter(w => !(w.removable && wallOff()));
+  const liveDoors = () => P.doors.filter(d => !(d.removable && wallOff()));
 
   function obstacles(selfId) {
     const list = [];
-    P.walls.forEach(w => list.push({ id: w.id, label: w.label, box: rectBox(w) }));
+    liveWalls().forEach(w => list.push({ id: w.id, label: w.label, box: rectBox(w) }));
     P.fixed.filter(f => f.solid).forEach(f => list.push({ id: f.id, label: f.label, box: rectBox(f) }));
-    P.furniture.filter(f => !f.hidden && f.id !== selfId).forEach(f => list.push({ id: f.id, label: f.label, box: aabb(f) }));
+    items().filter(f => !f.hidden && f.id !== selfId && f.solid !== false && !["hob", "sink", "bar"].includes(f.kind)).forEach(f => list.push({ id: f.id, label: f.clearance ? f.label + " (chair zone)" : f.label, box: effBox(f) }));
     return list;
   }
 
   // nearest obstacle in each direction among obstacles whose perpendicular span overlaps
   function gaps(f) {
-    const b = aabb(f), obs = obstacles(f.id), res = {};
+    const b = effBox(f), obs = obstacles(f.id), res = {}, bd = f.band || 0;
     const ov = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
     const dirs = {
-      left:  o => ov(b.y0, b.y1, o.y0, o.y1) > 0.5 && o.x1 <= b.x0 + 0.5 ? b.x0 - o.x1 : null,
-      right: o => ov(b.y0, b.y1, o.y0, o.y1) > 0.5 && o.x0 >= b.x1 - 0.5 ? o.x0 - b.x1 : null,
+      left:  o => ov(b.y0 - bd, b.y1 + bd, o.y0, o.y1) > 0.5 && o.x1 <= b.x0 + 0.5 ? b.x0 - o.x1 : null,
+      right: o => ov(b.y0 - bd, b.y1 + bd, o.y0, o.y1) > 0.5 && o.x0 >= b.x1 - 0.5 ? o.x0 - b.x1 : null,
       up:    o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y1 <= b.y0 + 0.5 ? b.y0 - o.y1 : null,
       down:  o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y0 >= b.y1 - 0.5 ? o.y0 - b.y1 : null
     };
@@ -148,8 +171,8 @@
   }
 
   function doorConflicts(f) {
-    const b = aabb(f), hits = [];
-    P.doors.forEach(dr => {
+    const b = effBox(f), hits = [];
+    liveDoors().forEach(dr => {
       const [hx, hy] = dr.hinge;
       let a0 = dr.closed, a1 = dr.open;
       let span = ((a1 - a0) % 360 + 540) % 360 - 180; // signed shortest sweep
@@ -178,6 +201,9 @@
     const defs = el("defs", {}, svg);
     const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
     el("line", { x1: 0, y1: 0, x2: 0, y2: 8, stroke: "#999", "stroke-width": 1.5 }, hatch);
+    const th = el("pattern", { id: "tallhatch", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("rect", { x: 0, y: 0, width: 7, height: 7, fill: "#6f6658" }, th);
+    el("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "#a39a8c", "stroke-width": 2 }, th);
     const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" }, defs);
     el("path", { d: "M0,1 L9,5 L0,9 z", fill: "#555" }, mk);
 
@@ -188,7 +214,7 @@
 
     // rooms
     P.rooms.forEach(rm => {
-      el("polygon", { points: rm.points.map(p => p.join(",")).join(" "), fill: rm.fill || "#fafafa", "fill-opacity": 0.85, stroke: "none" }, svg);
+      el("polygon", { points: rm.points.map(p => p.join(",")).join(" "), fill: (rm.id === "gang" && wallOff()) ? "#fbf8f1" : (rm.fill || "#fafafa"), "fill-opacity": 0.85, stroke: "none" }, svg);
     });
     // regrid over rooms (light)
     const g2 = el("g", { opacity: 0.6 }, svg);
@@ -204,14 +230,17 @@
       if (f.shape === "sink") el("rect", { x: f.x + 6, y: f.y + 8, width: f.w - 12, height: f.d - 16, rx: 6, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, svg);
     });
     // walls
-    P.walls.forEach(w => el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: w.kind === "inner" ? "#888" : "#555", stroke: "none" }, svg));
+    P.walls.forEach(w => {
+      if (w.removable && wallOff()) el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: "none", stroke: "#c62828", "stroke-width": 1, "stroke-dasharray": "4 3" }, svg);
+      else el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: w.kind === "inner" ? "#888" : "#555", stroke: "none" }, svg);
+    });
     // windows
     P.windows.forEach(wn => {
       el("line", { x1: wn.x1, y1: wn.y1 + (wn.y1 === 0 ? -15 : 15), x2: wn.x2, y2: wn.y2 + (wn.y2 === 0 ? -15 : 15), stroke: "#fff", "stroke-width": 26 }, svg);
       [-22, -15, -8].forEach(o => { const s = wn.y1 === 0 ? 1 : -1; el("line", { x1: wn.x1, y1: wn.y1 + o * s, x2: wn.x2, y2: wn.y2 + o * s, stroke: "#4a90c2", "stroke-width": 1.2 }, svg); });
     });
     // doors
-    P.doors.forEach(dr => {
+    liveDoors().forEach(dr => {
       const [hx, hy] = dr.hinge, rad = a => a * Math.PI / 180;
       const pc = [hx + dr.width * Math.cos(rad(dr.closed)), hy + dr.width * Math.sin(rad(dr.closed))];
       const po = [hx + dr.width * Math.cos(rad(dr.open)), hy + dr.width * Math.sin(rad(dr.open))];
@@ -230,8 +259,10 @@
     P.fixed.forEach(f => {
       if (f.kind === "appliance" && f.shape) return;
       if (f.kind === "core") return;
-      if (f.d > f.w * 1.5) txt(f.x + f.w / 2, f.y + f.d / 2, f.label, { size: 9, fill: "#333", anchor: "middle", rotate: -90 });
-      else txt(f.x + f.w / 2, f.y + f.d / 2 + 3, f.label, { size: 8.5, fill: "#333", anchor: "middle" });
+      if (f.labelAt) { txt(f.labelAt[0], f.labelAt[1], f.label, { size: f.labelSize || 8, fill: f.labelFill || "#333", anchor: "middle", rotate: f.labelRotate || 0 }); return; }
+      if (f.d > f.w * 1.5) { txt(f.x + f.w / 2, f.y + f.d / 2, f.label, { size: 9, fill: "#333", anchor: "middle", rotate: -90 }); return; }
+      const parts = f.label.length * 4.6 > f.w && f.label.includes(" (") ? [f.label.slice(0, f.label.indexOf(" (")), f.label.slice(f.label.indexOf(" (") + 1)] : [f.label];
+      parts.forEach((t, i) => txt(f.x + f.w / 2, f.y + f.d / 2 + 3 + (i - (parts.length - 1) / 2) * 10, t, { size: 8.5, fill: "#333", anchor: "middle" }));
     });
     txt(257, -48, "GARDEN (back)", { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
     txt(257, 1040, "STREET (front)", { size: 12, fill: "#666", anchor: "middle", weight: 700 });
@@ -240,19 +271,19 @@
     P.dims.forEach(dm => dim(dm.from, dm.to, dm.label));
 
     // clearance zones + furniture
-    const measured = P.furniture.filter(f => !f.hidden && f.measure);
-    measured.forEach(f => {
+    const measured = items().filter(f => !f.hidden && f.measure);
+    measured.filter(f => f.zones !== false).forEach(f => {
       const b = aabb(f);
       P.clearance.zones.slice().reverse().forEach((z, i) => {
         el("rect", { x: b.x0 - z, y: b.y0 - z, width: b.x1 - b.x0 + 2 * z, height: b.y1 - b.y0 + 2 * z, rx: 6, fill: "none", stroke: i === 0 ? "#1a7f37" : "#e08a00", "stroke-width": 1, "stroke-dasharray": "6 4", opacity: 0.8 }, svg);
       });
     });
-    P.furniture.forEach(f => { if (!f.hidden) drawItem(f); });
+    items().forEach(f => { if (!f.hidden) drawItem(f); });
     // measurement lines
     measured.forEach(f => {
       const { box: b, gaps: gs } = gaps(f);
       for (const d in gs) {
-        const best = gs[d]; if (!best || best.gap > 400) continue;
+        const best = gs[d]; if (!best || best.gap > 400 || best.gap < 1) continue;
         const o = best.obs.box;
         let x1, y1, x2, y2;
         if (d === "left" || d === "right") {
@@ -295,6 +326,13 @@
 
   function drawItem(f) {
     const gI = el("g", { class: "furn" + (f.id === selId ? " sel" : ""), "data-id": f.id }, svg);
+    gI.addEventListener("pointerdown", ev => startDrag(ev, f));
+    if (f.kind) return drawKitchen(f, gI);
+    if (f.clearance) {
+      const z = effBox(f);
+      el("rect", { x: z.x0, y: z.y0, width: z.x1 - z.x0, height: z.y1 - z.y0, rx: 4, fill: f.color || "#ccc", "fill-opacity": 0.22, stroke: f.color || "#999", "stroke-width": 1, "stroke-dasharray": "5 3" }, gI);
+      txt((z.x0 + z.x1) / 2, z.y0 + 11, `chair zone ${f.clearance.sides || 0} cm`, { size: 7.5, anchor: "middle", parent: gI, fill: "#46708f" });
+    }
     if (f.shape === "circle") {
       el("ellipse", { cx: f.x + f.w / 2, cy: f.y + f.w / 2, rx: f.w / 2, ry: f.w / 2, fill: f.color || "#ccc", "fill-opacity": 0.85, stroke: "#333", "stroke-width": 1.2 }, gI);
       txt(f.x + f.w / 2, f.y + f.w / 2 - 2, f.label.replace(" (placeholder)", ""), { size: 8.5, anchor: "middle", parent: gI });
@@ -313,7 +351,40 @@
       txt(cx, cy + 9, `${long} × ${short} cm`, { size: 9, anchor: "middle", parent: tg });
       if (/placeholder/i.test(f.label)) txt(cx, cy + 19, "(placeholder)", { size: 7.5, anchor: "middle", parent: tg, fill: "#555" });
     }
-    gI.addEventListener("pointerdown", ev => startDrag(ev, f));
+  }
+
+  function drawKitchen(f, g) {
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2, vert = f.d > f.w * 1.4;
+    const lab = (a, b, o = {}) => {
+      const tg = el("g", { transform: vert ? `rotate(-90 ${cx} ${cy})` : "" }, g);
+      txt(cx, cy - (b ? 2 : -3), a, { size: o.size || 8.5, anchor: "middle", parent: tg, weight: 600, fill: o.fill || "#222" });
+      if (b) txt(cx, cy + 9, b, { size: 8, anchor: "middle", parent: tg, fill: o.fill || "#222" });
+    };
+    if (f.kind === "base") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: f.color || "#e6dfd0", stroke: "#4a4a4a", "stroke-width": 1.2 }, g);
+      el("rect", { x: f.x + 2, y: f.y + 2, width: f.w - 4, height: f.d - 4, fill: "none", stroke: "#b5ab98", "stroke-width": 0.6 }, g);
+      lab(f.label, `${Math.max(f.w, f.d)} × ${Math.min(f.w, f.d)} base`);
+    } else if (f.kind === "tall") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "url(#tallhatch)", stroke: "#222", "stroke-width": 1.6 }, g);
+      el("line", { x1: f.x, y1: f.y, x2: f.x + f.w, y2: f.y + f.d, stroke: "#222", "stroke-width": 0.6 }, g);
+      el("line", { x1: f.x + f.w, y1: f.y, x2: f.x, y2: f.y + f.d, stroke: "#222", "stroke-width": 0.6 }, g);
+      const tg = el("g", {}, g);
+      el("rect", { x: cx - 27, y: cy - 10, width: 54, height: 21, rx: 2, fill: "#fff", "fill-opacity": 0.9 }, tg);
+      txt(cx, cy - 1, f.label.replace(" tall unit", "").replace("Storage tall", "Storage"), { size: 7, anchor: "middle", parent: tg, weight: 700 });
+      txt(cx, cy + 8, `TALL ${f.w}×${f.d}`, { size: 6.5, anchor: "middle", parent: tg });
+    } else if (f.kind === "bar") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "#f3ecdc", "fill-opacity": 0.8, stroke: "#8a7a5a", "stroke-width": 0.9, "stroke-dasharray": "4 2" }, g);
+      lab(f.label, null, { size: 7.5, fill: "#6b5b3b" });
+      const n = Math.max(1, Math.floor(f.w / 55));
+      for (let i = 0; i < n; i++) el("circle", { cx: f.x + f.w * (i + 0.5) / n, cy: f.y - 18, r: 17, fill: "#fff", stroke: "#8a7a5a", "stroke-width": 0.8, "stroke-dasharray": "2 2" }, g);
+    } else if (f.kind === "hob") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "#3a3a3a", "fill-opacity": 0.12, stroke: "#333", "stroke-width": 0.8 }, g);
+      [[0.3, 0.27], [0.7, 0.27], [0.3, 0.73], [0.7, 0.73]].forEach(([a, b]) => el("circle", { cx: f.x + a * f.w, cy: f.y + b * f.d, r: Math.min(f.w, f.d) * 0.17, fill: "none", stroke: "#333", "stroke-width": 0.9 }, g));
+    } else if (f.kind === "sink") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, rx: 4, fill: "#dfe9f1", stroke: "#333", "stroke-width": 0.8 }, g);
+      el("rect", { x: f.x + 5, y: f.y + 5, width: f.w - 10, height: f.d - 10, rx: 5, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, g);
+      el("circle", { cx: cx, cy: cy, r: 2.5, fill: "#555" }, g);
+    }
   }
 
   // ---------- interaction ----------
@@ -359,7 +430,7 @@
   document.getElementById("backdrop").onclick = () => setDrawer(false);
   window.addEventListener("keydown", ev => {
     if (!selId || ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA") return;
-    const f = P.furniture.find(i => i.id === selId); if (!f) return;
+    const f = items().find(i => i.id === selId); if (!f) return;
     const s = ev.shiftKey ? 10 : 1, k = ev.key;
     if (k === "ArrowLeft") f.x -= s; else if (k === "ArrowRight") f.x += s;
     else if (k === "ArrowUp") f.y -= s; else if (k === "ArrowDown") f.y += s;
@@ -375,19 +446,23 @@
   function renderPanel() {
     document.getElementById("title").textContent = P.meta.title;
     document.getElementById("subtitle").textContent = P.meta.subtitle + " · " + P.meta.version;
-    document.getElementById("notes").innerHTML = (P.meta.notes || []).map(n => "<li>" + n + "</li>").join("");
+    document.getElementById("wallChk").checked = wallOff();
+    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...((cur() || {}).notes || []), ...(P.meta.notes || [])].map(n => "<li>" + n + "</li>").join("");
+    const ls = document.getElementById("layoutSel");
+    if (ls.options.length !== (P.layouts || []).length) ls.innerHTML = (P.layouts || []).map(l => `<option value="${l.id}">${l.label}</option>`).join("");
+    ls.value = layoutId;
     document.getElementById("source").textContent = "Source: " + P.meta.source;
     const box = document.getElementById("items"); box.innerHTML = "";
-    P.furniture.forEach(f => {
+    items().forEach(f => {
       const d = document.createElement("div"); d.className = "item" + (f.id === selId ? " sel" : "");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !f.hidden;
       cb.onclick = e => { e.stopPropagation(); f.hidden = !cb.checked; render(); };
-      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = f.color || "#ccc";
+      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = f.color || ({ base: "#e6dfd0", tall: "#6f6658", bar: "#f3ecdc", hob: "#555", sink: "#dfe9f1" }[f.kind]) || "#ccc";
       const nm = document.createElement("span"); nm.textContent = f.label;
       const dm = document.createElement("span"); dm.className = "dim"; dm.textContent = f.shape === "circle" ? `Ø${f.w}` : `${f.w}×${f.d}`;
       d.append(cb, sw, nm, dm); d.onclick = () => { selId = f.id; render(); }; box.appendChild(d);
     });
-    const sb = document.getElementById("selbox"); const f = P.furniture.find(i => i.id === selId);
+    const sb = document.getElementById("selbox"); const f = items().find(i => i.id === selId);
     if (!f) { sb.innerHTML = '<span class="note">Click an item.</span>'; }
     else {
       sb.innerHTML = `<div style="margin-bottom:4px"><b>${f.label}</b> <span class="note">(${f.id})</span>${f.note ? `<div class="note">${f.note}</div>` : ""}</div>`;
@@ -403,13 +478,13 @@
       sb.append(b, m);
     }
     const cl = document.getElementById("clear"); cl.innerHTML = "";
-    const measured = P.furniture.filter(i => !i.hidden && i.measure);
+    const measured = items().filter(i => !i.hidden && i.measure);
     if (!measured.length) cl.innerHTML = '<span class="note">Tick an island (or set measure:true) to see clearances.</span>';
     const names = { left: "← left", right: "→ right", up: "↑ to garden side", down: "↓ to street side" };
     measured.forEach(i => {
       const { gaps: gs } = gaps(i);
       let h = `<b>${i.label}</b> <span class="note">${i.w}×${i.d}</span><table class="m">`;
-      for (const d in gs) { const g = gs[d]; if (!g) continue; h += `<tr><td>${names[d]}</td><td class="${cls(g.gap)}">${r1(g.gap)} cm</td><td class="note">${g.obs.label}</td></tr>`; }
+      for (const d in gs) { const g = gs[d]; if (!g) continue; h += g.gap < 1 ? `<tr><td>${names[d]}</td><td class="note">attached</td><td class="note">${g.obs.label}</td></tr>` : `<tr><td>${names[d]}</td><td class="${cls(g.gap)}">${r1(g.gap)} cm</td><td class="note">${g.obs.label}</td></tr>`; }
       const dc = doorConflicts(i);
       if (dc.length) h += `<tr><td colspan="3" class="bad">Blocks door swing: ${dc.map(x => x.label).join(", ")}</td></tr>`;
       cl.insertAdjacentHTML("beforeend", h + "</table>");
@@ -421,16 +496,25 @@
     const out = JSON.parse(JSON.stringify(P));
     out.doors.forEach(d => delete d._el);
     const head = "// House 24 ground floor planner config - exported " + new Date().toISOString().slice(0, 16) + "\n// One furniture item per line: x,y = top-left (cm), w along x, d along y.\nwindow.PLAN = ";
-    let s = JSON.stringify(out, null, 2);
-    // keep each furniture item on one line
-    s = s.replace(/"furniture": \[[\s\S]*\]\s*}$/, () => '"furniture": [\n' + out.furniture.map(f => "    " + JSON.stringify(f)).join(",\n") + "\n  ]\n}");
+    const furn = out.furniture, lays = out.layouts || [];
+    delete out.furniture; delete out.layouts;
+    let s = JSON.stringify(out, null, 2).replace(/\n}$/, "");
+    s += ',\n  "furniture": [\n' + furn.map(f => "    " + JSON.stringify(f)).join(",\n") + "\n  ]";
+    s += ',\n  "layouts": [\n' + lays.map(l => { const { items: it, ...rest } = l; const h = JSON.stringify(rest).replace(/}$/, ', "items": [\n'); return "    " + h + it.map(i => "      " + JSON.stringify(i)).join(",\n") + "\n    ]}"; }).join(",\n") + "\n  ]\n}";
     return head + s + ";\n";
   }
   document.getElementById("btnExport").onclick = () => { const t = document.getElementById("out"); t.style.display = "block"; t.value = serialize(); t.select(); console.log(t.value); };
   document.getElementById("btnDownload").onclick = () => {
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([serialize()], { type: "text/javascript" })); a.download = "plan.js"; a.click();
   };
-  document.getElementById("btnReset").onclick = () => { P = JSON.parse(JSON.stringify(ORIGINAL)); selId = null; render(); };
+  document.getElementById("btnReset").onclick = () => { P = JSON.parse(JSON.stringify(ORIGINAL)); selId = null; pickLayout(layoutId); render(); };
+  document.getElementById("layoutSel").onchange = ev => {
+    pickLayout(ev.target.value); selId = null;
+    syncHash(); render();
+  };
+  const syncHash = () => history.replaceState(null, "", "#layout=" + layoutId + (wallOff() ? "&wall=off" : ""));
+  document.getElementById("wallChk").onchange = ev => { P.hallWall.removed = ev.target.checked; syncHash(); render(); };
+  window.addEventListener("hashchange", () => { const id = new URLSearchParams(location.hash.slice(1)).get("layout"); const hp = new URLSearchParams(location.hash.slice(1)); if (hp.get("wall")) P.hallWall.removed = hp.get("wall") === "off"; if (id && id !== layoutId) { pickLayout(id); selId = null; } render(); });
 
   render();
 })();
