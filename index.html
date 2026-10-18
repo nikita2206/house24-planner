@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>House 24 - Ground Floor Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#222; --muted:#777; --panel:#f6f6f4; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); background:#fff; display:flex; height:100vh; }
+  #stage { flex:1; min-width:0; display:flex; flex-direction:column; }
+  header { padding:10px 16px 4px; }
+  header h1 { margin:0; font-size:18px; }
+  header .sub { color:var(--muted); font-size:12px; }
+  #svgwrap { flex:1; min-height:0; padding:4px 8px 8px; }
+  svg { width:100%; height:100%; display:block; user-select:none; }
+  aside { width:360px; background:var(--panel); border-left:1px solid #ddd; padding:12px 14px; overflow:auto; }
+  aside h2 { font-size:14px; margin:14px 0 6px; }
+  aside h2:first-child { margin-top:0; }
+  .item { display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; }
+  .item:hover { background:#eaeae6; }
+  .item.sel { background:#ddeaf7; }
+  .sw { width:12px; height:12px; border-radius:2px; border:1px solid #0003; flex:none; }
+  .item .dim { margin-left:auto; color:var(--muted); font-variant-numeric: tabular-nums; }
+  table.m { border-collapse:collapse; width:100%; font-variant-numeric: tabular-nums; }
+  table.m td { padding:2px 4px; border-bottom:1px solid #e3e3e0; vertical-align:top; }
+  .ok { color:#1a7f37; } .warn { color:#b26b00; } .bad { color:#c62828; font-weight:600; }
+  .edit { display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; }
+  .edit label { font-size:11px; color:var(--muted); display:flex; flex-direction:column; }
+  .edit input { width:100%; padding:2px 3px; font: inherit; }
+  button { font: inherit; padding:4px 8px; margin:2px 4px 2px 0; cursor:pointer; }
+  textarea { width:100%; height:220px; font: 11px/1.3 ui-monospace, Menlo, monospace; }
+  .legend span { display:inline-block; margin-right:10px; }
+  .note { color:var(--muted); font-size:12px; }
+  .furn { cursor:move; }
+  .furn.sel rect, .furn.sel ellipse { stroke:#1565c0; stroke-width:2.5; }
+</style>
+<script>
+/* ==== CONFIG (edit src/plan.js, then run src/build.py) ==== */
+// House 24 (EASE Amsterdam, Parkrand woning) - ground floor planner config.
+// Units: cm. Origin (0,0) = inside face of the back (garden) facade x inside face of the left party wall.
+// x grows to the right (towards the hallway side), y grows towards the street (front door).
+// Source: [ext] House 24 - Sales Drawing (Verkooptekening VK-B02-24), 1:50, dated 16-07-2026.
+// Measured from the PDF vectors (scale checked: 5140 and 9820 dimension lines match within 2 mm).
+// The drawing says dimensions are indicative and EXCLUDE wall finish (plaster/tiles): expect ~1-2 cm less per wall.
+//
+// FURNITURE: one item per line. x,y = top-left corner (before rotation), w = width along x, d = depth along y,
+// rotation in degrees around the item's centre, shape "rect" | "circle" (circle uses w as diameter).
+// Optional: hidden:true (start switched off), measure:true (show clearances), image:"photo.png", note:"...".
+window.PLAN = {
+  meta: {
+    title: "House 24 - Ground floor (begane grond)",
+    subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
+    source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
+    version: "v1 - 2026-10-18",
+    notes: [
+      "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
+      "A 90 cm deep island needs 100 + 90 + 90 = 280 cm (comfortable 120 + 90 + 100 = 310 cm): it does not fit next to the standard run.",
+      "Largest island that keeps 100 cm to the run and clears the trapkast door: about 180-240 x 75 cm (Slim island B).",
+      "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm."
+    ]
+  },
+  view: { margin: 70, grid: 50, gridMajor: 100 },
+  clearance: { min: 90, good: 100, comfort: 120, zones: [90, 120] },
+
+  // Rooms: floor polygons (drawn as fills + labels)
+  rooms: [
+    { id: "open", label: "Woonkamer / keuken (open plan)", fill: "#fbf8f1",
+      points: [[0,0],[514,0],[514,374],[358,374],[358,481],[328.5,481],[328.5,982],[0,982]], labelAt: [380, 230] },
+    { id: "trapkast", label: "Trapkast (wp)", fill: "#eeeeee", points: [[335.5,488],[514,488],[514,620],[335.5,620]] },
+    { id: "toilet", label: "Toilet", fill: "#eef3f7", points: [[335.5,630],[470.5,630],[470.5,723],[335.5,723]] },
+    { id: "gang", label: "Gang (hall)", fill: "#f3f0ea", points: [[335.5,730],[514,730],[514,982],[335.5,982]], labelAt: [400, 900] }
+  ],
+
+  // Walls as rectangles (solid; used for clearance measuring). Facade/party walls drawn outside the 514 x 982 box.
+  walls: [
+    { id: "party-left",  label: "party wall", x: -25, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "party-right", label: "party wall", x: 514, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "facade-back", label: "back facade", x: 0, y: -30, w: 514, d: 30, kind: "facade" },
+    { id: "facade-front",label: "front facade", x: 0, y: 982, w: 514, d: 30, kind: "facade" },
+    { id: "core-wall-a", label: "toilet/trapkast wall", x: 328.5, y: 481, w: 7, d: 42, kind: "inner" },
+    { id: "core-wall-b", label: "toilet/trapkast wall", x: 328.5, y: 615, w: 7, d: 140, kind: "inner" },
+    { id: "core-wall-c", label: "hall wall", x: 328.5, y: 844, w: 7, d: 138, kind: "inner" },
+    { id: "trapkast-top", label: "trapkast wall", x: 328.5, y: 481, w: 85.5, d: 7, kind: "inner" },
+    { id: "stair-wall", label: "stair wall", x: 358, y: 379, w: 12, d: 102, kind: "inner" },
+    { id: "toilet-top", label: "toilet wall", x: 335.5, y: 620, w: 178.5, d: 10, kind: "inner" },
+    { id: "toilet-bottom", label: "toilet wall", x: 335.5, y: 723, w: 178.5, d: 7, kind: "inner" },
+    { id: "mk-wall", label: "meter cupboard wall", x: 440, y: 730, w: 7, d: 88, kind: "inner" }
+  ],
+
+  windows: [
+    { id: "win-back",  label: "garden glazing (with door)", x1: 74, y1: 0, x2: 442, y2: 0 },
+    { id: "win-front", label: "front window", x1: 63, y1: 982, x2: 258, y2: 982 }
+  ],
+
+  // Doors: hinge point, leaf width, closed and open angle (deg; 0 = +x/right, 90 = +y/down, 180 = left, 270 = up)
+  doors: [
+    { id: "door-garden",  label: "garden door", hinge: [79, 0], width: 97, closed: 0, open: 90 },
+    { id: "door-trapkast",label: "trapkast door (swings into kitchen)", hinge: [328.5, 523], width: 92, closed: 90, open: 180 },
+    { id: "door-hall",    label: "kitchen-hall door", hinge: [328.5, 844], width: 89, closed: 270, open: 180 },
+    { id: "door-front",   label: "front door", hinge: [451, 982], width: 104, closed: 180, open: 270 },
+    { id: "door-toilet",  label: "toilet door (indicative)", hinge: [340, 730], width: 85, closed: 0, open: 90 }
+  ],
+
+  // Fixed elements (solid = counts as an obstacle for clearance measuring)
+  fixed: [
+    { id: "kitchen-tall",  label: "fridge/oven", x: 0, y: 416, w: 60, d: 60, kind: "kitchen", solid: true },
+    { id: "kitchen-run",   label: "kitchen run / worktop", x: 0, y: 476, w: 60, d: 250, kind: "kitchen", solid: true },
+    { id: "hob",           label: "hob", x: 5, y: 492, w: 50, d: 58, kind: "appliance", shape: "hob" },
+    { id: "sink",          label: "sink + dishwasher", x: 8, y: 655, w: 45, d: 60, kind: "appliance", shape: "sink" },
+    { id: "wtw-hatch",     label: "WTW box", x: 0, y: 377, w: 47, d: 34, kind: "boxing", solid: true },
+    { id: "stair",         label: "stair (open side)", x: 370, y: 374, w: 144, d: 107, kind: "stair", solid: true },
+    { id: "core",          label: "trapkast / toilet / meterkast", x: 335.5, y: 488, w: 178.5, d: 242, kind: "core", solid: true },
+    { id: "heatpump",      label: "heat pump (wp)", x: 410, y: 545, w: 63, d: 55, kind: "appliance" },
+    { id: "meterkast",     label: "mk", x: 447, y: 730, w: 67, d: 88, kind: "appliance" }
+  ],
+
+  // Reference dimension lines from the drawing
+  dims: [
+    { from: [0, 30], to: [514, 30], label: "5140" },
+    { from: [-45, 0], to: [-45, 982], label: "9820" },
+    { from: [0, 960], to: [328.5, 960], label: "3285" },
+    { from: [335.5, 960], to: [514, 960], label: "1785" },
+    { from: [490, 0], to: [490, 374], label: "3745 (drawing) / 374 measured" }
+  ],
+
+  furniture: [
+    { id: "island-A", label: "Test island A (requested)", x: 180, y: 501, w: 90, d: 200, rotation: 0, color: "#d9a066", shape: "rect", measure: true, note: "200x90 with 120 cm cook-side walkway: only 58 cm left to the toilet wall" },
+    { id: "island-B", label: "Slim island B", x: 160, y: 530, w: 75, d: 180, rotation: 0, color: "#7fb069", shape: "rect", measure: true, hidden: true, note: "largest depth that keeps 100 cm to the run and still clears the trapkast door swing (~93 cm behind)" },
+    { id: "island-C", label: "Island C 240x100", x: 180, y: 486, w: 100, d: 240, rotation: 0, color: "#c97b63", shape: "rect", measure: true, hidden: true, note: "alternative size - does not fit here" },
+    { id: "dining", label: "Dining table (placeholder)", x: 60, y: 800, w: 160, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect" },
+    { id: "sofa", label: "Sofa (placeholder)", x: 60, y: 250, w: 240, d: 95, rotation: 0, color: "#b8b8d1", shape: "rect" },
+    { id: "coffee", label: "Coffee table (placeholder)", x: 140, y: 130, w: 80, d: 80, rotation: 0, color: "#e3d5b8", shape: "circle" }
+  ]
+};
+
+</script>
+</head>
+<body>
+<div id="stage">
+  <header><h1 id="title"></h1><div class="sub" id="subtitle"></div></header>
+  <div id="svgwrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+</div>
+<aside>
+  <h2>Items <span class="note">(tick = shown, click = select, drag on plan)</span></h2>
+  <div id="items"></div>
+  <h2>Selected</h2>
+  <div id="selbox" class="note">Click an item.</div>
+  <h2>Clearances</h2>
+  <div class="legend note"><span class="bad">&lt; 90 too tight</span><span class="warn">90-119 ok/min</span><span class="ok">&ge; 120 comfortable</span></div>
+  <div id="clear"></div>
+  <p class="note">Dashed boxes around a measured island: orange = 90 cm, green = 120 cm. Red door swing = island blocks that door.</p>
+  <h2>Notes</h2>
+  <ul id="notes" class="note" style="padding-left:16px;margin:0"></ul>
+  <h2>Config</h2>
+  <button id="btnExport">Export config</button><button id="btnDownload">Download plan.js</button><button id="btnReset">Reset</button>
+  <textarea id="out" style="display:none" spellcheck="false"></textarea>
+  <p class="note">Keys: arrows move the selected item 1 cm (Shift = 10 cm), R rotates 90&deg;, H hides it. Units: cm, origin = inside corner garden facade / left party wall.</p>
+  <p class="note" id="source"></p>
+</aside>
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const ORIGINAL = JSON.parse(JSON.stringify(window.PLAN));
+  let P = JSON.parse(JSON.stringify(window.PLAN));
+  let selId = null;
+  const svg = document.getElementById("svg");
+
+  // URL hash: #show=id1,id2&hide=id3
+  (function applyHash() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const show = (h.get("show") || "").split(",").filter(Boolean);
+    const hide = (h.get("hide") || "").split(",").filter(Boolean);
+    const only = (h.get("only") || "").split(",").filter(Boolean);
+    P.furniture.forEach(f => {
+      if (only.length) f.hidden = !only.includes(f.id);
+      if (show.includes(f.id)) f.hidden = false;
+      if (hide.includes(f.id)) f.hidden = true;
+    });
+    if (h.get("sel")) selId = h.get("sel");
+  })();
+
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const r1 = v => Math.round(v);
+
+  // ---------- geometry ----------
+  function aabb(f) {
+    if (f.shape === "circle") return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.w };
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2, a = (f.rotation || 0) * Math.PI / 180;
+    const hw = (Math.abs(Math.cos(a)) * f.w + Math.abs(Math.sin(a)) * f.d) / 2;
+    const hd = (Math.abs(Math.sin(a)) * f.w + Math.abs(Math.cos(a)) * f.d) / 2;
+    return { x0: cx - hw, y0: cy - hd, x1: cx + hw, y1: cy + hd };
+  }
+  const rectBox = r => ({ x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.d });
+
+  function obstacles(selfId) {
+    const list = [];
+    P.walls.forEach(w => list.push({ id: w.id, label: w.label, box: rectBox(w) }));
+    P.fixed.filter(f => f.solid).forEach(f => list.push({ id: f.id, label: f.label, box: rectBox(f) }));
+    P.furniture.filter(f => !f.hidden && f.id !== selfId).forEach(f => list.push({ id: f.id, label: f.label, box: aabb(f) }));
+    return list;
+  }
+
+  // nearest obstacle in each direction among obstacles whose perpendicular span overlaps
+  function gaps(f) {
+    const b = aabb(f), obs = obstacles(f.id), res = {};
+    const ov = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
+    const dirs = {
+      left:  o => ov(b.y0, b.y1, o.y0, o.y1) > 0.5 && o.x1 <= b.x0 + 0.5 ? b.x0 - o.x1 : null,
+      right: o => ov(b.y0, b.y1, o.y0, o.y1) > 0.5 && o.x0 >= b.x1 - 0.5 ? o.x0 - b.x1 : null,
+      up:    o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y1 <= b.y0 + 0.5 ? b.y0 - o.y1 : null,
+      down:  o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y0 >= b.y1 - 0.5 ? o.y0 - b.y1 : null
+    };
+    for (const d in dirs) {
+      let best = null;
+      obs.forEach(o => {
+        const g = dirs[d](o.box);
+        if (g !== null && (best === null || g < best.gap)) best = { gap: Math.max(0, g), obs: o };
+      });
+      res[d] = best;
+    }
+    return { box: b, gaps: res };
+  }
+
+  function doorConflicts(f) {
+    const b = aabb(f), hits = [];
+    P.doors.forEach(dr => {
+      const [hx, hy] = dr.hinge;
+      let a0 = dr.closed, a1 = dr.open;
+      let span = ((a1 - a0) % 360 + 540) % 360 - 180; // signed shortest sweep
+      let hit = false;
+      for (let i = 0; i <= 24 && !hit; i++) {
+        const a = (a0 + span * i / 24) * Math.PI / 180;
+        for (let r = 4; r <= dr.width; r += 4) {
+          const x = hx + r * Math.cos(a), y = hy + r * Math.sin(a);
+          if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) { hit = true; break; }
+        }
+      }
+      if (hit) hits.push(dr);
+    });
+    return hits;
+  }
+
+  const cls = g => g < P.clearance.min ? "bad" : g < P.clearance.comfort ? "warn" : "ok";
+  const col = g => g < P.clearance.min ? "#c62828" : g < P.clearance.comfort ? "#e08a00" : "#1a7f37";
+
+  // ---------- render ----------
+  function render() {
+    svg.innerHTML = "";
+    const m = P.view.margin;
+    const W = 514, D = 982;
+    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70}`);
+    const defs = el("defs", {}, svg);
+    const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("line", { x1: 0, y1: 0, x2: 0, y2: 8, stroke: "#999", "stroke-width": 1.5 }, hatch);
+    const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,1 L9,5 L0,9 z", fill: "#555" }, mk);
+
+    // grid
+    const g = el("g", {}, svg);
+    for (let x = 0; x <= W; x += P.view.grid) el("line", { x1: x, y1: 0, x2: x, y2: D, stroke: x % P.view.gridMajor ? "#eee" : "#ddd", "stroke-width": 0.6 }, g);
+    for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#eee" : "#ddd", "stroke-width": 0.6 }, g);
+
+    // rooms
+    P.rooms.forEach(rm => {
+      el("polygon", { points: rm.points.map(p => p.join(",")).join(" "), fill: rm.fill || "#fafafa", "fill-opacity": 0.85, stroke: "none" }, svg);
+    });
+    // regrid over rooms (light)
+    const g2 = el("g", { opacity: 0.6 }, svg);
+    for (let x = 0; x <= W; x += P.view.grid) el("line", { x1: x, y1: 0, x2: x, y2: D, stroke: x % P.view.gridMajor ? "#ececec" : "#d8d8d8", "stroke-width": 0.6 }, g2);
+    for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#ececec" : "#d8d8d8", "stroke-width": 0.6 }, g2);
+
+    // fixed
+    P.fixed.forEach(f => {
+      const fill = { kitchen: "#d7d2c8", stair: "url(#hatch)", core: "none", boxing: "#cfcfcf", appliance: "none" }[f.kind] || "#ddd";
+      if (f.kind === "core") return;
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, stroke: "#555", "stroke-width": f.kind === "appliance" ? 0.8 : 1.2, "stroke-dasharray": f.kind === "appliance" ? "3 2" : "" }, svg);
+      if (f.shape === "hob") [[0.3, 0.25], [0.7, 0.25], [0.3, 0.72], [0.7, 0.72]].forEach(([a, b]) => el("circle", { cx: f.x + a * f.w, cy: f.y + b * f.d, r: 9, fill: "none", stroke: "#555", "stroke-width": 0.8 }, svg));
+      if (f.shape === "sink") el("rect", { x: f.x + 6, y: f.y + 8, width: f.w - 12, height: f.d - 16, rx: 6, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, svg);
+    });
+    // walls
+    P.walls.forEach(w => el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: w.kind === "inner" ? "#888" : "#555", stroke: "none" }, svg));
+    // windows
+    P.windows.forEach(wn => {
+      el("line", { x1: wn.x1, y1: wn.y1 + (wn.y1 === 0 ? -15 : 15), x2: wn.x2, y2: wn.y2 + (wn.y2 === 0 ? -15 : 15), stroke: "#fff", "stroke-width": 26 }, svg);
+      [-22, -15, -8].forEach(o => { const s = wn.y1 === 0 ? 1 : -1; el("line", { x1: wn.x1, y1: wn.y1 + o * s, x2: wn.x2, y2: wn.y2 + o * s, stroke: "#4a90c2", "stroke-width": 1.2 }, svg); });
+    });
+    // doors
+    P.doors.forEach(dr => {
+      const [hx, hy] = dr.hinge, rad = a => a * Math.PI / 180;
+      const pc = [hx + dr.width * Math.cos(rad(dr.closed)), hy + dr.width * Math.sin(rad(dr.closed))];
+      const po = [hx + dr.width * Math.cos(rad(dr.open)), hy + dr.width * Math.sin(rad(dr.open))];
+      const span = ((dr.open - dr.closed) % 360 + 540) % 360 - 180;
+      // gap in wall
+      el("line", { x1: hx, y1: hy, x2: pc[0], y2: pc[1], stroke: "#fff", "stroke-width": dr.hinge[1] === 0 || dr.hinge[1] === 982 ? 0 : 9 }, svg);
+      dr._el = el("path", { d: `M${hx},${hy} L${po[0]},${po[1]} A${dr.width},${dr.width} 0 0 ${span > 0 ? 0 : 1} ${pc[0]},${pc[1]} Z`, fill: "#f0e6d0", "fill-opacity": 0.45, stroke: "#8a7a5a", "stroke-width": 0.9, "stroke-dasharray": "4 3" }, svg);
+      el("line", { x1: hx, y1: hy, x2: po[0], y2: po[1], stroke: "#5a4a2a", "stroke-width": 2.2 }, svg);
+    });
+    // labels for rooms & fixed
+    P.rooms.forEach(rm => {
+      const xs = rm.points.map(p => p[0]), ys = rm.points.map(p => p[1]);
+      const [lx, ly] = rm.labelAt || [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+      txt(lx, ly, rm.label, { size: 13, fill: "#999", anchor: "middle", weight: 600 });
+    });
+    P.fixed.forEach(f => {
+      if (f.kind === "appliance" && f.shape) return;
+      if (f.kind === "core") return;
+      if (f.d > f.w * 1.5) txt(f.x + f.w / 2, f.y + f.d / 2, f.label, { size: 9, fill: "#333", anchor: "middle", rotate: -90 });
+      else txt(f.x + f.w / 2, f.y + f.d / 2 + 3, f.label, { size: 8.5, fill: "#333", anchor: "middle" });
+    });
+    txt(257, -48, "GARDEN (back)", { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
+    txt(257, 1040, "STREET (front)", { size: 12, fill: "#666", anchor: "middle", weight: 700 });
+
+    // dims
+    P.dims.forEach(dm => dim(dm.from, dm.to, dm.label));
+
+    // clearance zones + furniture
+    const measured = P.furniture.filter(f => !f.hidden && f.measure);
+    measured.forEach(f => {
+      const b = aabb(f);
+      P.clearance.zones.slice().reverse().forEach((z, i) => {
+        el("rect", { x: b.x0 - z, y: b.y0 - z, width: b.x1 - b.x0 + 2 * z, height: b.y1 - b.y0 + 2 * z, rx: 6, fill: "none", stroke: i === 0 ? "#1a7f37" : "#e08a00", "stroke-width": 1, "stroke-dasharray": "6 4", opacity: 0.8 }, svg);
+      });
+    });
+    P.furniture.forEach(f => { if (!f.hidden) drawItem(f); });
+    // measurement lines
+    measured.forEach(f => {
+      const { box: b, gaps: gs } = gaps(f);
+      for (const d in gs) {
+        const best = gs[d]; if (!best || best.gap > 400) continue;
+        const o = best.obs.box;
+        let x1, y1, x2, y2;
+        if (d === "left" || d === "right") {
+          const y = (Math.max(b.y0, o.y0) + Math.min(b.y1, o.y1)) / 2;
+          x1 = d === "left" ? b.x0 : b.x1; x2 = d === "left" ? b.x0 - best.gap : b.x1 + best.gap; y1 = y2 = y;
+        } else {
+          const x = (Math.max(b.x0, o.x0) + Math.min(b.x1, o.x1)) / 2;
+          y1 = d === "up" ? b.y0 : b.y1; y2 = d === "up" ? b.y0 - best.gap : b.y1 + best.gap; x1 = x2 = x;
+        }
+        const c = col(best.gap);
+        el("line", { x1, y1, x2, y2, stroke: c, "stroke-width": 1.6, "marker-start": "url(#arr)", "marker-end": "url(#arr)" }, svg);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        const lab = r1(best.gap) + " cm";
+        const horiz = d === "left" || d === "right";
+        el("rect", { x: mx - 20, y: my - (horiz ? 17 : 7), width: 40, height: 13, rx: 3, fill: "#fff", stroke: c, "stroke-width": 0.8 }, svg);
+        txt(mx, my - (horiz ? 7 : -3), lab, { size: 10, fill: c, anchor: "middle", weight: 700 });
+      }
+      doorConflicts(f).forEach(dr => { dr._el.setAttribute("stroke", "#c62828"); dr._el.setAttribute("fill", "#f6c3c3"); dr._el.setAttribute("stroke-dasharray", ""); dr._el.setAttribute("stroke-width", 1.6); });
+    });
+
+    // scale bar
+    const sb = el("g", { transform: `translate(0, ${D + 62})` }, svg);
+    for (let i = 0; i < 3; i++) el("rect", { x: i * 100, y: 0, width: 100, height: 8, fill: i % 2 ? "#fff" : "#333", stroke: "#333", "stroke-width": 1 }, sb);
+    [0, 100, 200, 300].forEach(v => txt(v, 22, v === 300 ? "3 m" : String(v / 100), { size: 10, anchor: "middle", parent: sb }));
+    txt(320, 8, "scale (cm grid: 50 light / 100 dark)", { size: 9, fill: "#777", parent: sb });
+
+    renderPanel();
+  }
+
+  function txt(x, y, s, o = {}) {
+    const t = el("text", { x, y, "font-size": o.size || 10, fill: o.fill || "#222", "text-anchor": o.anchor || "start", "font-weight": o.weight || 400, "font-family": "Helvetica, Arial, sans-serif" }, o.parent || svg);
+    if (o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
+    t.textContent = s; return t;
+  }
+  function dim(a, b, label) {
+    el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "#777", "stroke-width": 0.7, "marker-start": "url(#arr)", "marker-end": "url(#arr)" }, svg);
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, vert = a[0] === b[0];
+    txt(mx + (vert ? -4 : 0), my - 3, label, { size: 9, fill: "#666", anchor: "middle", rotate: vert ? -90 : 0 });
+  }
+
+  function drawItem(f) {
+    const gI = el("g", { class: "furn" + (f.id === selId ? " sel" : ""), "data-id": f.id }, svg);
+    if (f.shape === "circle") {
+      el("ellipse", { cx: f.x + f.w / 2, cy: f.y + f.w / 2, rx: f.w / 2, ry: f.w / 2, fill: f.color || "#ccc", "fill-opacity": 0.85, stroke: "#333", "stroke-width": 1.2 }, gI);
+      txt(f.x + f.w / 2, f.y + f.w / 2 - 2, f.label.replace(" (placeholder)", ""), { size: 8.5, anchor: "middle", parent: gI });
+      txt(f.x + f.w / 2, f.y + f.w / 2 + 10, `Ø${f.w}`, { size: 8.5, anchor: "middle", parent: gI, weight: 700 });
+      if (/placeholder/i.test(f.label)) txt(f.x + f.w / 2, f.y + f.w / 2 + 20, "placeholder", { size: 7.5, anchor: "middle", parent: gI, fill: "#666" });
+    } else {
+      const cx = f.x + f.w / 2, cy = f.y + f.d / 2;
+      const inner = el("g", { transform: `rotate(${f.rotation || 0} ${cx} ${cy})` }, gI);
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, rx: 2, fill: f.color || "#ccc", "fill-opacity": 0.85, stroke: "#333", "stroke-width": 1.2 }, inner);
+      if (f.image) el("image", { href: f.image, x: f.x, y: f.y, width: f.w, height: f.d, preserveAspectRatio: "xMidYMid slice", opacity: 0.9 }, inner);
+      const vert = f.d > f.w * 1.4;
+      const tg = el("g", { transform: vert ? `rotate(-90 ${cx} ${cy})` : "" }, inner);
+      const name = f.label.replace(" (placeholder)", "");
+      txt(cx, cy - 3, name, { size: 9, anchor: "middle", parent: tg, weight: 600 });
+      const long = Math.max(f.w, f.d), short = Math.min(f.w, f.d);
+      txt(cx, cy + 9, `${long} × ${short} cm`, { size: 9, anchor: "middle", parent: tg });
+      if (/placeholder/i.test(f.label)) txt(cx, cy + 19, "(placeholder)", { size: 7.5, anchor: "middle", parent: tg, fill: "#555" });
+    }
+    gI.addEventListener("pointerdown", ev => startDrag(ev, f));
+  }
+
+  // ---------- interaction ----------
+  let drag = null;
+  function svgPt(ev) { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function startDrag(ev, f) {
+    ev.preventDefault(); selId = f.id;
+    const p = svgPt(ev); drag = { f, dx: p.x - f.x, dy: p.y - f.y };
+    svg.setPointerCapture(ev.pointerId); render();
+  }
+  svg.addEventListener("pointermove", ev => {
+    if (!drag) return; const p = svgPt(ev);
+    drag.f.x = Math.round(p.x - drag.dx); drag.f.y = Math.round(p.y - drag.dy); render();
+  });
+  svg.addEventListener("pointerup", () => { drag = null; });
+  svg.addEventListener("pointerdown", ev => { if (ev.target === svg) { selId = null; render(); } });
+  window.addEventListener("keydown", ev => {
+    if (!selId || ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA") return;
+    const f = P.furniture.find(i => i.id === selId); if (!f) return;
+    const s = ev.shiftKey ? 10 : 1, k = ev.key;
+    if (k === "ArrowLeft") f.x -= s; else if (k === "ArrowRight") f.x += s;
+    else if (k === "ArrowUp") f.y -= s; else if (k === "ArrowDown") f.y += s;
+    else if (k === "r" || k === "R") rotate90(f);
+    else if (k === "h" || k === "H") f.hidden = true;
+    else return;
+    ev.preventDefault(); render();
+  });
+  function rotate90(f) { // swap w/d keeping centre: cleaner than angle for measuring
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2; [f.w, f.d] = [f.d, f.w]; f.x = Math.round(cx - f.w / 2); f.y = Math.round(cy - f.d / 2);
+  }
+
+  function renderPanel() {
+    document.getElementById("title").textContent = P.meta.title;
+    document.getElementById("subtitle").textContent = P.meta.subtitle + " · " + P.meta.version;
+    document.getElementById("notes").innerHTML = (P.meta.notes || []).map(n => "<li>" + n + "</li>").join("");
+    document.getElementById("source").textContent = "Source: " + P.meta.source;
+    const box = document.getElementById("items"); box.innerHTML = "";
+    P.furniture.forEach(f => {
+      const d = document.createElement("div"); d.className = "item" + (f.id === selId ? " sel" : "");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !f.hidden;
+      cb.onclick = e => { e.stopPropagation(); f.hidden = !cb.checked; render(); };
+      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = f.color || "#ccc";
+      const nm = document.createElement("span"); nm.textContent = f.label;
+      const dm = document.createElement("span"); dm.className = "dim"; dm.textContent = f.shape === "circle" ? `Ø${f.w}` : `${f.w}×${f.d}`;
+      d.append(cb, sw, nm, dm); d.onclick = () => { selId = f.id; render(); }; box.appendChild(d);
+    });
+    const sb = document.getElementById("selbox"); const f = P.furniture.find(i => i.id === selId);
+    if (!f) { sb.innerHTML = '<span class="note">Click an item.</span>'; }
+    else {
+      sb.innerHTML = `<div style="margin-bottom:4px"><b>${f.label}</b> <span class="note">(${f.id})</span>${f.note ? `<div class="note">${f.note}</div>` : ""}</div>`;
+      const ed = document.createElement("div"); ed.className = "edit";
+      ["x", "y", "w", "d", "rotation"].forEach(k => {
+        const l = document.createElement("label"); l.textContent = k === "rotation" ? "rot°" : k;
+        const i = document.createElement("input"); i.type = "number"; i.value = f[k] || 0;
+        i.onchange = () => { f[k] = Number(i.value); render(); }; l.appendChild(i); ed.appendChild(l);
+      });
+      sb.appendChild(ed);
+      const b = document.createElement("button"); b.textContent = "Rotate 90°"; b.onclick = () => { rotate90(f); render(); };
+      const m = document.createElement("button"); m.textContent = f.measure ? "Stop measuring" : "Measure clearances"; m.onclick = () => { f.measure = !f.measure; render(); };
+      sb.append(b, m);
+    }
+    const cl = document.getElementById("clear"); cl.innerHTML = "";
+    const measured = P.furniture.filter(i => !i.hidden && i.measure);
+    if (!measured.length) cl.innerHTML = '<span class="note">Tick an island (or set measure:true) to see clearances.</span>';
+    const names = { left: "← left", right: "→ right", up: "↑ to garden side", down: "↓ to street side" };
+    measured.forEach(i => {
+      const { gaps: gs } = gaps(i);
+      let h = `<b>${i.label}</b> <span class="note">${i.w}×${i.d}</span><table class="m">`;
+      for (const d in gs) { const g = gs[d]; if (!g) continue; h += `<tr><td>${names[d]}</td><td class="${cls(g.gap)}">${r1(g.gap)} cm</td><td class="note">${g.obs.label}</td></tr>`; }
+      const dc = doorConflicts(i);
+      if (dc.length) h += `<tr><td colspan="3" class="bad">Blocks door swing: ${dc.map(x => x.label).join(", ")}</td></tr>`;
+      cl.insertAdjacentHTML("beforeend", h + "</table>");
+    });
+  }
+
+  // ---------- export ----------
+  function serialize() {
+    const out = JSON.parse(JSON.stringify(P));
+    out.doors.forEach(d => delete d._el);
+    const head = "// House 24 ground floor planner config - exported " + new Date().toISOString().slice(0, 16) + "\n// One furniture item per line: x,y = top-left (cm), w along x, d along y.\nwindow.PLAN = ";
+    let s = JSON.stringify(out, null, 2);
+    // keep each furniture item on one line
+    s = s.replace(/"furniture": \[[\s\S]*\]\s*}$/, () => '"furniture": [\n' + out.furniture.map(f => "    " + JSON.stringify(f)).join(",\n") + "\n  ]\n}");
+    return head + s + ";\n";
+  }
+  document.getElementById("btnExport").onclick = () => { const t = document.getElementById("out"); t.style.display = "block"; t.value = serialize(); t.select(); console.log(t.value); };
+  document.getElementById("btnDownload").onclick = () => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([serialize()], { type: "text/javascript" })); a.download = "plan.js"; a.click();
+  };
+  document.getElementById("btnReset").onclick = () => { P = JSON.parse(JSON.stringify(ORIGINAL)); selId = null; render(); };
+
+  render();
+})();
+</script>
+</body>
+</html>
