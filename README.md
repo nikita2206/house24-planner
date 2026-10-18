@@ -4,7 +4,8 @@
 Units in cm; origin = inside corner of the garden facade and the left party wall. Source: sales drawing VK-B02-24 (1:50, 16-07-2026), dimensions indicative and excluding wall finish.
 
 - Live page: https://nikita2206.github.io/house24-planner/ (first floor: https://nikita2206.github.io/house24-planner/#floor=1)
-- First floor screenshots: https://nikita2206.github.io/house24-planner/screenshots/first-floor-desktop.png and `first-floor-mobile.png`
+- First floor layouts: `#floor=1&layout=bath-instead-of-shower` (default) and `#floor=1&layout=bath-instead-of-washer`
+- First floor screenshots: https://nikita2206.github.io/house24-planner/screenshots/first-floor-desktop.png (default layout), `first-floor-bath-instead-of-shower-{desktop,mobile}.png`, `first-floor-bath-instead-of-washer-{desktop,mobile}.png`
 - Screenshots: https://nikita2206.github.io/house24-planner/screenshots/plan.png (also `plan-slim-island.png`, `plan-island-240x100.png`)
 
 ## Editing
