@@ -1,7 +1,7 @@
 # Touch/mobile regression test. Usage: python3 tests/touch_test.py [url]
 import sys, asyncio
 from playwright.async_api import async_playwright
-URL = sys.argv[1] if len(sys.argv) > 1 else "file:///workspace/house/repo/index.html"
+URL = (sys.argv[1] if len(sys.argv) > 1 else "file:///workspace/house/repo/index.html") + "#layout=island-A"
 
 async def touch_drag(cdp, x0, y0, x1, y1, steps=12):
     await cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
