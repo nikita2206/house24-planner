@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>House 24 - Floor Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { --ink:#222; --muted:#777; --panel:#f6f6f4; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 13px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); background:#fff; display:flex; height:100vh; }
+  #stage { flex:1; min-width:0; display:flex; flex-direction:column; }
+  header { padding:10px 16px 4px; }
+  header h1 { margin:0; font-size:18px; }
+  header .sub { color:var(--muted); font-size:12px; }
+  #svgwrap { flex:1; min-height:0; padding:4px 8px 8px; }
+  svg { width:100%; height:100%; display:block; user-select:none; }
+  aside { width:360px; background:var(--panel); border-left:1px solid #ddd; padding:12px 14px; overflow:auto; }
+  aside h2 { font-size:14px; margin:14px 0 6px; }
+  aside h2:first-child { margin-top:0; }
+  .item { display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:4px; cursor:pointer; }
+  .item:hover { background:#eaeae6; }
+  .item.sel { background:#ddeaf7; }
+  .sw { width:12px; height:12px; border-radius:2px; border:1px solid #0003; flex:none; }
+  .item .dim { margin-left:auto; color:var(--muted); font-variant-numeric: tabular-nums; }
+  table.m { border-collapse:collapse; width:100%; font-variant-numeric: tabular-nums; }
+  table.m td { padding:2px 4px; border-bottom:1px solid #e3e3e0; vertical-align:top; }
+  .ok { color:#1a7f37; } .warn { color:#b26b00; } .bad { color:#c62828; font-weight:600; }
+  .edit { display:grid; grid-template-columns: repeat(5, 1fr); gap:4px; }
+  .edit label { font-size:11px; color:var(--muted); display:flex; flex-direction:column; }
+  .edit input { width:100%; padding:2px 3px; font: inherit; }
+  button { font: inherit; padding:4px 8px; margin:2px 4px 2px 0; cursor:pointer; }
+  textarea { width:100%; height:220px; font: 11px/1.3 ui-monospace, Menlo, monospace; }
+  .legend span { display:inline-block; margin-right:10px; }
+  .note { color:var(--muted); font-size:12px; }
+  select { font: inherit; }
+  .furn { cursor:move; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  svg, header { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
+  svg.dragging, body.dragging { touch-action:none; }
+  #btnDrawer, #backdrop { display:none; }
+  @media (max-width: 800px) {
+    body { display:block; height:100vh; height:100dvh; }
+    #stage { width:100%; height:100vh; height:100dvh; }
+    header { padding:8px 110px 2px 10px; }
+    header h1 { font-size:15px; }
+    #svgwrap { padding:2px; }
+    aside { position:fixed; top:0; right:0; bottom:0; width:min(88vw, 360px); z-index:20; transform:translateX(100%);
+            transition:transform .2s ease; box-shadow:-4px 0 16px #0003; padding-top:52px; }
+    body.drawer-open aside { transform:none; }
+    #backdrop { position:fixed; inset:0; background:#0004; z-index:15; }
+    body.drawer-open #backdrop { display:block; }
+    #btnDrawer { display:block; position:fixed; top:8px; right:8px; z-index:30; margin:0; padding:8px 12px; border-radius:20px;
+                 border:1px solid #bbb; background:#fff; box-shadow:0 2px 6px #0002; font-weight:600; }
+  }
+  .furn.sel rect, .furn.sel ellipse { stroke:#1565c0; stroke-width:2.5; }
+  #tabs { display:flex; gap:4px; margin-top:6px; }
+  #tabs button { margin:0; padding:5px 12px; border:1px solid #bbb; border-radius:16px; background:#fff; font-weight:600; color:#444; }
+  #tabs button.on { background:#1565c0; border-color:#1565c0; color:#fff; }
+  @media (max-width: 800px) { #tabs button { padding:6px 12px; } }
+</style>
+<script>
+/* ==== CONFIG (edit src/plan.js, then run src/build.py) ==== */
+// House 24 (EASE Amsterdam, Parkrand woning) - floor planner config: ground floor (top level) + firstFloor (below).
+// Units: cm. Origin (0,0) = inside face of the back facade (achtergevel, living room, TERRACE side) x inside face of the left party wall.
+// x grows to the right (towards the hallway side), y grows towards the front facade (voorgevel: front door, kitchen/dining,
+// opening onto the front GARDEN; the shed (berging) and the shared path/street are beyond the garden).
+// Orientation checked 18-10-2026 against VK-B02-24 (terrace strip + "hekwerk 1000" at the woonkamer side; ~6-7 m garden,
+// gate, brievenbus and berging beyond the voorgevel) and the elevations VK-B02-GVL ("Voorgevel" = front door side).
+// Source: [ext] House 24 - Sales Drawing (Verkooptekening VK-B02-24), 1:50, dated 16-07-2026.
+// Measured from the PDF vectors (scale checked: 5140 and 9820 dimension lines match within 2 mm).
+// The drawing says dimensions are indicative and EXCLUDE wall finish (plaster/tiles): expect ~1-2 cm less per wall.
+//
+// FURNITURE: one item per line. x,y = top-left corner (before rotation), w = width along x, d = depth along y,
+// rotation in degrees around the item's centre, shape "rect" | "circle" (circle uses w as diameter).
+// Optional: hidden:true (start switched off), measure:true (show clearances), image:"photo.png", note:"...".
+window.PLAN = {
+  meta: {
+    title: "House 24 - Ground floor (begane grond)",
+    subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
+    source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
+    version: "v5 - 2026-10-18 (orientation fix + B102 French doors)",
+    notes: [
+      "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
+      "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm.",
+      "Orientation: top = back facade (achtergevel) with the living room and the small terrace (~1.4 m deep, 1 m railing); bottom = front facade (voorgevel) with the front door and the kitchen/dining frame, opening onto the front garden (~6-7 m, then gate, berging and the shared path).",
+      "B102 (signed construction contract, EUR 1,760): the standard kitchen/dining frame in the voorgevel (fixed glass + one outward door, x 64-256) becomes a frame with double French doors: 2 leaves of ~91 cm opening OUT into the garden (option drawing VK-F-O3). Keep ~80 cm clear inside in front of them (green dashed zone)."
+    ]
+  },
+  view: { margin: 70, grid: 50, gridMajor: 100 },
+  // Hypothetical: remove the wall (and door) between the entrance hall (gang) and the kitchen/dining area.
+  // Toggle in the sidebar or with #...&wall=off. Toilet / trapkast / meter cupboard block stays. Needs builder (UBA) approval.
+  hallWall: { removed: false, note: "Hypothetical: hall wall removed (dashed). Needs UBA approval - check structure, ventilation/fire rules and that the front door then opens straight into the living space." },
+  // Labels drawn outside the top (y < 0) and bottom (y > depth) facades, and the names used in the clearance table.
+  sides: { top: "TERRACE (back, achtergevel)", bottom: "GARDEN (front, voorgevel) - front door; berging + path beyond", up: "↑ to terrace side", down: "↓ to garden side" },
+  clearance: { min: 90, good: 100, comfort: 120, zones: [90, 120] },
+
+  // Rooms: floor polygons (drawn as fills + labels)
+  rooms: [
+    { id: "open", label: "Woonkamer / keuken (open plan)", fill: "#fbf8f1",
+      points: [[0,0],[514,0],[514,374],[358,374],[358,481],[328.5,481],[328.5,982],[0,982]], labelAt: [300, 40] },
+    { id: "trapkast", label: "Trapkast (wp)", fill: "#eeeeee", points: [[335.5,488],[514,488],[514,620],[335.5,620]] },
+    { id: "toilet", label: "Toilet", fill: "#eef3f7", points: [[335.5,630],[470.5,630],[470.5,723],[335.5,723]] },
+    { id: "gang", label: "Gang (hall)", fill: "#f3f0ea", points: [[335.5,730],[514,730],[514,982],[335.5,982]], labelAt: [400, 900] }
+  ],
+
+  // Walls as rectangles (solid; used for clearance measuring). Facade/party walls drawn outside the 514 x 982 box.
+  walls: [
+    { id: "party-left",  label: "party wall", x: -25, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "party-right", label: "party wall", x: 514, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "facade-back", label: "back facade", x: 0, y: -30, w: 514, d: 30, kind: "facade" },
+    { id: "facade-front",label: "front facade", x: 0, y: 982, w: 514, d: 30, kind: "facade" },
+    { id: "core-wall-a", label: "toilet/trapkast wall", x: 328.5, y: 481, w: 7, d: 42, kind: "inner" },
+    { id: "core-wall-b", label: "toilet/trapkast wall", x: 328.5, y: 615, w: 7, d: 115, kind: "inner" },
+    { id: "hall-wall-1", label: "hall wall", x: 328.5, y: 730, w: 7, d: 25, kind: "inner", removable: "hall" },
+    { id: "core-wall-c", label: "hall wall", x: 328.5, y: 844, w: 7, d: 138, kind: "inner", removable: "hall" },
+    { id: "trapkast-top", label: "trapkast wall", x: 328.5, y: 481, w: 85.5, d: 7, kind: "inner" },
+    { id: "stair-wall", label: "stair wall", x: 358, y: 379, w: 12, d: 102, kind: "inner" },
+    { id: "toilet-top", label: "toilet wall", x: 335.5, y: 620, w: 178.5, d: 10, kind: "inner" },
+    { id: "toilet-bottom", label: "toilet wall", x: 335.5, y: 723, w: 178.5, d: 7, kind: "inner" },
+    { id: "mk-wall", label: "meter cupboard wall", x: 440, y: 730, w: 7, d: 88, kind: "inner" }
+  ],
+
+  windows: [
+    { id: "win-back",  label: "terrace glazing (with terrace door)", x1: 74, y1: 0, x2: 442, y2: 0 },
+    { id: "win-b102",  label: "B102 French door frame (glazed, voorgevel)", x1: 64, y1: 982, x2: 256, y2: 982 }
+    // Standard (without B102): fixed glass x 64-156 + one outward door x 156-253 (hinge right, ~93 wide).
+  ],
+
+  // Doors: hinge point, leaf width, closed and open angle (deg; 0 = +x/right, 90 = +y/down, 180 = left, 270 = up)
+  doors: [
+    { id: "door-terrace", label: "terrace door (living room)", hinge: [79, 0], width: 97, closed: 0, open: 90 },
+    { id: "b102-left",  label: "B102 French door, left leaf (opens out to the garden)", hinge: [68.6, 1012], width: 91, closed: 0, open: 90, gap: false },
+    { id: "b102-right", label: "B102 French door, right leaf (opens out to the garden)", hinge: [251, 1012], width: 91, closed: 180, open: 90, gap: false },
+    { id: "door-trapkast",label: "trapkast door (swings into kitchen)", hinge: [328.5, 523], width: 92, closed: 90, open: 180 },
+    { id: "door-hall",    label: "kitchen-hall door", hinge: [328.5, 844], width: 89, closed: 270, open: 180, removable: "hall" },
+    { id: "door-front",   label: "front door", hinge: [451, 982], width: 104, closed: 180, open: 270 },
+    { id: "door-toilet",  label: "toilet door (indicative)", hinge: [340, 730], width: 85, closed: 0, open: 90 }
+  ],
+
+  // Fixed elements (solid = counts as an obstacle for clearance measuring)
+  fixed: [
+    { id: "wtw-hatch",     label: "WTW inspection hatch (shower heat recovery)", labelAt: [-12, 394], labelRotate: -90, labelFill: "#fff", labelSize: 7, x: 0, y: 377, w: 47, d: 34, kind: "boxing", solid: true },
+    { id: "stair",         label: "stair (open side)", x: 370, y: 374, w: 144, d: 107, kind: "stair", solid: true },
+    { id: "core",          label: "trapkast / toilet / meterkast", x: 335.5, y: 488, w: 178.5, d: 242, kind: "core", solid: true },
+    { id: "heatpump",      label: "heat pump (wp)", x: 415, y: 554, w: 63, d: 62, kind: "appliance" },
+    { id: "ufh-gf",        label: "UFH manifold (vv)", x: 500, y: 449, w: 14, d: 43, kind: "appliance", labelAt: [490, 470], labelRotate: -90, labelSize: 6 },
+    { id: "b102-zone",     label: "keep clear for the B102 French doors (~80)", x: 64, y: 902, w: 192, d: 80, kind: "zone", solid: true, labelAt: [160, 945], labelSize: 8 },
+    { id: "meterkast",     label: "Meter cupboard (mk)", x: 447, y: 730, w: 67, d: 88, kind: "appliance" }
+  ],
+
+  // Reference dimension lines from the drawing
+  dims: [
+    { from: [0, 30], to: [514, 30], label: "5140" },
+    { from: [-45, 0], to: [-45, 982], label: "9820" },
+    { from: [0, 960], to: [328.5, 960], label: "3285" },
+    { from: [335.5, 960], to: [514, 960], label: "1785" },
+    { from: [490, 0], to: [490, 374], label: "3745 (drawing) / 374 measured" }
+  ],
+
+  // Common items shown in every layout (placeholders).
+  furniture: [
+    { id: "sofa", label: "Sofa (placeholder)", x: 419, y: 90, w: 95, d: 240, rotation: 0, color: "#b8b8d1", shape: "rect" },
+    { id: "coffee", label: "Coffee table (placeholder)", x: 300, y: 170, w: 80, d: 80, rotation: 0, color: "#e3d5b8", shape: "circle" }
+  ],
+
+  // LAYOUTS: pick one in the sidebar dropdown or with #layout=<id>. Each layout = its own list of items (one per line),
+  // kitchen elements included, so everything is draggable/editable. kind: base (base units + worktop), tall (full-height
+  // unit ~210 high, 60 deep), bar (worktop overhang for stools), hob, sink (symbols, not obstacles), or omitted for furniture.
+  // band: extra cm used when looking left/right for obstacles (catches the toilet-wall corner diagonally). zones:false = no dashed 90/120 boxes.
+  defaultLayout: "L-garden-tall-opposite",
+  layouts: [
+    { id: "std", label: "Standard kitchen (as sold), no island", notes: ["Intermat standard: fridge/oven tall unit + 250 cm worktop run on the left wall (310 cm in total)."], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-run", label: "Worktop run 250", kind: "base", x: 0, y: 476, w: 60, d: 250 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "island-A", label: "Standard + test island 200x90 (does not fit)", notes: ["268 cm between the run front and the toilet/trapkast wall; a 90 cm island needs 280 (min) to 310 (comfortable)."], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-run", label: "Worktop run 250", kind: "base", x: 0, y: 476, w: 60, d: 250 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
+      { id: "island-A", label: "Test island A", x: 180, y: 501, w: 90, d: 200, rotation: 0, color: "#d9a066", shape: "rect", measure: true, note: "200x90 with 120 cm cook-side walkway: only 58 cm left to the toilet wall" },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "island-B", label: "Standard + slim island 180x75 (min. fit)", notes: ["Largest island that keeps 100 cm to the run and clears the trapkast door: about 180-240 x 75 cm."], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-run", label: "Worktop run 250", kind: "base", x: 0, y: 476, w: 60, d: 250 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
+      { id: "island-B", label: "Slim island B", x: 160, y: 530, w: 75, d: 180, rotation: 0, color: "#7fb069", shape: "rect", measure: true, note: "100 cm to the run, ~93 cm behind, just clears the trapkast door" },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "island-C", label: "Standard + island 240x100 (does not fit)", notes: ["Leaves ~49 cm behind the island."], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-run", label: "Worktop run 250", kind: "base", x: 0, y: 476, w: 60, d: 250 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 655, w: 45, d: 60 },
+      { id: "island-C", label: "Island C", x: 180, y: 486, w: 100, d: 240, rotation: 0, color: "#c97b63", shape: "rect", measure: true },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "L-garden-tall-opposite", label: "1a: L at the living-room (terrace) end, tall units at the front (garden) end", notes: [
+      "Return leg at the living-room end (y 416-476, towards the terrace side), 215 cm from the wall (155 beyond the run), 60 deep: forms a peninsula facing the living room and the terrace glazing. (Earlier versions called this the 'garden end' - wrong: the garden is at the front.)",
+      "Fridge/oven tall unit moves to the front (garden/dining) end; extra 60 cm storage tall unit next to it (run extends 60 cm into the dining zone).",
+      "Sink moves onto the leg (view to the living room / terrace) with the dishwasher under it: needs a drain in the ground-floor slab (no crawlspace) - must be fixed before pouring. Hob moves ~40 cm towards the front (y 530-588) for landing space next to the corner.",
+      "30 cm overhang on the living-room side = breakfast bar for 2-3 stools. The WTW inspection box stays free on the wall just behind the stools."
+    ], items: [
+      { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 416, w: 60, d: 250 },
+      { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 416, w: 155, d: 60, measure: true, band: 70, zones: false },
+      { id: "k-bar", label: "Bar overhang 30", kind: "bar", x: 60, y: 386, w: 155, d: 30 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 112, y: 423, w: 60, d: 45 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 530, w: 50, d: 58 },
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 666, w: 60, d: 60 },
+      { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "L-garden-tall-corner", label: "1b: L at the living-room (terrace) end, storage tall at the leg end", notes: [
+      "Same L as 1a, but the 60 cm storage tall unit closes the end of the return leg (acts as a room divider); leg worktop 95 cm.",
+      "Fridge/oven tall unit at the front (garden) end of the run; sink on the leg (slab drain needed), hob on the wall.",
+      "The tall unit at the leg end blocks part of the view/light from the kitchen to the living room and terrace glazing; breakfast bar only 95 cm (2 stools)."
+    ], items: [
+      { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 416, w: 60, d: 250 },
+      { id: "k-leg", label: "Return leg 95", kind: "base", x: 60, y: 416, w: 95, d: 60, zones: false },
+      { id: "k-store", label: "Storage tall 60", kind: "tall", x: 155, y: 416, w: 60, d: 60, measure: true, band: 70, zones: false },
+      { id: "k-bar", label: "Bar overhang 30", kind: "bar", x: 60, y: 386, w: 95, d: 30 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 90, y: 423, w: 55, d: 45 },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 530, w: 50, d: 58 },
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 666, w: 60, d: 60 },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "L-street-tall-opposite", label: "2a: L at the front (garden) end, storage tall at the living-room end", notes: [
+      "With the B102 French doors the dining table is turned lengthwise to keep ~80 cm in front of the doors: that leaves only ~56 cm between the end of the leg and the table (tight walkway).",
+      "Return leg at the front end (y 666-726), 215 cm from the wall, 60 deep: separates the kitchen from the dining zone at the B102 French doors.",
+      "Fridge/oven tall unit stays; the storage tall unit goes right next to it (y 476-536) because the WTW box blocks the wall above it. Wall worktop 190 incl. corner.",
+      "Hob moves to y 572-630, sink onto the leg (slab drain needed). No bar overhang: it would push the dining table into the B102 door zone."
+    ], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 476, w: 60, d: 60, measure: true, zones: false },
+      { id: "k-run", label: "Wall run 190 (incl. corner)", kind: "base", x: 0, y: 536, w: 60, d: 190 },
+      { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 666, w: 155, d: 60, measure: true, band: 30, zones: false },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 572, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 112, y: 674, w: 60, d: 45 },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]},
+    { id: "L-street-tall-corner", label: "2b: L at the front (garden) end, storage tall next to the corner", notes: [
+      "With the B102 French doors the dining table is turned lengthwise to keep ~80 cm in front of the doors: that leaves only ~56 cm between the end of the leg and the table (tight walkway).",
+      "Return leg at the front end (y 666-726), 215 cm from the wall. Fridge/oven tall unit and hob stay exactly as in the standard kitchen.",
+      "Sink moves ~65 cm along the same wall (y 590-650) out of the corner: short drain move, no slab drain under the leg needed.",
+      "Storage tall unit on the left wall just past the corner (y 726-786), opening towards the dining table (pantry/dining storage).",
+      "No bar overhang (dining zone too shallow); the leg faces the dining area and the French doors to the garden."
+    ], items: [
+      { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 416, w: 60, d: 60 },
+      { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 476, w: 60, d: 250 },
+      { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 666, w: 155, d: 60, measure: true, band: 30, zones: false },
+      { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 492, w: 50, d: 58 },
+      { id: "k-sink", label: "Sink", kind: "sink", x: 8, y: 590, w: 45, d: 60 },
+      { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
+      { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
+    ]}
+  ]
+};
+
+// FIRST FLOOR (eerste verdieping). Same origin, axes and scale as the ground floor (0,0 = inside corner back/terrace facade /
+// left party wall, 514 x 982 inside). Measured from the PDF vectors of VK-B02-24 and cross-checked with the drawing's
+// dimension strings: 5140 / 3745 (slaapkamer 1) / 2625 x 2265 (badkamer) / 1085 x 3560 (overloop) / 2390 (stair) /
+// 1290 x 1100 (techniek) / 2625 x 3610 (slaapkamer 2) / 2445 x 2375 (slaapkamer 3). Interior walls 70 mm, bathroom walls 100 mm.
+// Shown with the "First floor" tab or #floor=1. Same item/layout format as the ground floor.
+window.PLAN.firstFloor = {
+  meta: {
+    title: "House 24 - First floor (eerste verdieping)",
+    subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
+    source: "VK-B02-24 sales drawing 1:50 (16-07-2026), first floor. Indicative dimensions, excl. wall finish.",
+    notes: [
+      "Room sizes (inside, excl. finish): slaapkamer 1 514 x 374 (19.2 m2), slaapkamer 2 262 x 361 (9.5 m2), slaapkamer 3 244 x 238 (5.8 m2), badkamer 262 x 226 (5.9 m2), overloop 108 x 356, techniek 128 x 110.",
+      "Sanitary, WTW and manifold positions are copied from the sales drawing symbols; sizes are approximate (not dimensioned on the drawing).",
+      "Door leaves ~92 cm, positions read from the drawing (not dimensioned). Bathroom and techniek doors swing into the landing.",
+      "Master: 180x200 bed on the left party wall with bedside tables; built-in wardrobe along the full right party wall (374 x 60). Slaapkamer 2 = kids room (bunk bed, kids desk, play space). Slaapkamer 3 = study (desk 120x90 facing the window, 70 cm chair zone, bookcase)."
+    ]
+  },
+  size: [514, 982],
+  rooms: [
+    { id: "sk1", label: "Slaapkamer 1 (master)", fill: "#f7f4ee", points: [[0,0],[514,0],[514,374.4],[0,374.4]], labelAt: [330, 160] },
+    { id: "bath", label: "Badkamer", fill: "#eef3f7", points: [[0,384.6],[262.5,384.6],[262.5,610],[0,610]], labelAt: [130, 495] },
+    { id: "landing", label: "Overloop", fill: "#f3f0ea", points: [[269.7,381.4],[378.2,381.4],[378.2,737.4],[269.7,737.4]], labelAt: [324, 600] },
+    { id: "tech", label: "Techniek", fill: "#eeeeee", points: [[385.9,627.6],[514,627.6],[514,737.4],[385.9,737.4]], labelAt: [430, 725] },
+    { id: "sk2", label: "Slaapkamer 2", fill: "#f7f4ee", points: [[0,621],[262.5,621],[262.5,982],[0,982]], labelAt: [190, 880] },
+    { id: "sk3", label: "Slaapkamer 3", fill: "#f7f4ee", points: [[269.7,744.6],[514,744.6],[514,982],[269.7,982]], labelAt: [377, 845] }
+  ],
+  walls: [
+    { id: "party-left",  label: "party wall", x: -25, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "party-right", label: "party wall", x: 514, y: -30, w: 25, d: 1042, kind: "party" },
+    { id: "facade-back", label: "back facade", x: 0, y: -30, w: 514, d: 30, kind: "facade" },
+    { id: "facade-front",label: "front facade", x: 0, y: 982, w: 514, d: 30, kind: "facade" },
+    { id: "sk1-wall-a", label: "bedroom 1 / bathroom wall", x: 0, y: 374.4, w: 269.7, d: 10.2, kind: "inner" },
+    { id: "sk1-wall-b", label: "bedroom 1 wall", x: 269.7, y: 374.4, w: 5, d: 7, kind: "inner" },
+    { id: "sk1-wall-c", label: "bedroom 1 / stair wall", x: 366.5, y: 374.4, w: 147.5, d: 7, kind: "inner" },
+    { id: "bath-bottom", label: "bathroom / bedroom 2 wall", x: 0, y: 610, w: 262.5, d: 11, kind: "inner" },
+    { id: "mid-wall-a", label: "bathroom / landing wall", x: 262.5, y: 384.6, w: 7.2, d: 48.4, kind: "inner" },
+    { id: "mid-wall-b", label: "bathroom / landing wall", x: 262.5, y: 527, w: 7.2, d: 103, kind: "inner" },
+    { id: "mid-wall-c", label: "bedroom 2 wall", x: 262.5, y: 723, w: 7.2, d: 259, kind: "inner" },
+    { id: "tech-top", label: "stair / techniek wall", x: 378.2, y: 620, w: 135.8, d: 7.6, kind: "inner" },
+    { id: "tech-west-a", label: "techniek wall", x: 378.2, y: 620, w: 7.7, d: 11, kind: "inner" },
+    { id: "tech-west-b", label: "techniek wall", x: 378.2, y: 724, w: 7.7, d: 13.4, kind: "inner" },
+    { id: "sk3-wall-a", label: "bedroom 3 wall", x: 269.7, y: 737.4, w: 10.3, d: 7.2, kind: "inner" },
+    { id: "sk3-wall-b", label: "bedroom 3 / techniek wall", x: 372, y: 737.4, w: 142, d: 7.2, kind: "inner" }
+  ],
+  windows: [
+    { id: "win-sk1-l", label: "bedroom 1 window", x1: 74, y1: 0, x2: 181, y2: 0 },
+    { id: "win-sk1-r", label: "bedroom 1 window", x1: 334, y1: 0, x2: 440, y2: 0 },
+    { id: "win-sk2", label: "bedroom 2 window", x1: 63, y1: 982, x2: 170, y2: 982 },
+    { id: "win-sk3", label: "bedroom 3 window", x1: 344, y1: 982, x2: 450, y2: 982 }
+  ],
+  doors: [
+    { id: "door-sk1",  label: "bedroom 1 door", hinge: [274.7, 374.4], width: 92, closed: 0, open: 270, gap: false },
+    { id: "door-bath", label: "bathroom door (swings onto landing)", hinge: [269.7, 433], width: 94, closed: 90, open: 0, gap: false },
+    { id: "door-sk2",  label: "bedroom 2 door", hinge: [262.5, 630], width: 93, closed: 90, open: 180, gap: false },
+    { id: "door-tech", label: "techniek door (swings onto landing)", hinge: [378.2, 724], width: 93, closed: 270, open: 180, gap: false },
+    { id: "door-sk3",  label: "bedroom 3 door", hinge: [280, 744.6], width: 92, closed: 0, open: 90, gap: false }
+  ],
+  fixed: [
+    { id: "stair", label: "stair void (trapgat)", x: 380, y: 381.4, w: 134, d: 238.6, kind: "stair", solid: true },
+    { id: "railing", label: "stair railing (traphek)", x: 375.5, y: 381.4, w: 4.5, d: 238.6, kind: "boxing", solid: true, labelAt: [371, 470], labelRotate: -90, labelSize: 7 },
+    { id: "shaft", label: "pipe shaft", x: 0, y: 337, w: 25, d: 37.4, kind: "boxing", solid: true, labelAt: [32, 333], labelSize: 7 },
+    { id: "wc-wall", label: "WC pre-wall (voorzetwand)", x: 0, y: 384.6, w: 120, d: 25, kind: "boxing", solid: true, labelSize: 7, labelAt: [60, 400] },
+    { id: "wc", label: "WC", x: 57, y: 409.6, w: 43, d: 55, kind: "appliance", solid: true },
+    { id: "basin", label: "washbasin", x: 154, y: 384.6, w: 75, d: 48, kind: "appliance", solid: true },
+    { id: "wtw", label: "WTW unit", x: 457, y: 637, w: 57, d: 64, kind: "appliance", solid: true },
+    { id: "ufh", label: "UFH manifold (vv)", x: 405, y: 627.6, w: 49, d: 16, kind: "appliance", solid: true, labelAt: [430, 655], labelSize: 7 }
+    // Shower, bath and washer/dryer are layout items (see layouts below) so they can move per bathroom variant.
+  ],
+  dims: [
+    { from: [0, 30], to: [514, 30], label: "5140" },
+    { from: [-45, 0], to: [-45, 982], label: "9820" },
+    { from: [500, 0], to: [500, 374.4], label: "3745" },
+    { from: [0, 505], to: [262.5, 505], label: "2625" },
+    { from: [250, 384.6], to: [250, 610], label: "2265" },
+    { from: [269.7, 400], to: [378.2, 400], label: "1085" },
+    { from: [356, 381.4], to: [356, 737.4], label: "3560" },
+    { from: [500, 381.4], to: [500, 620], label: "2390" },
+    { from: [385.9, 712], to: [514, 712], label: "1290" },
+    { from: [394, 627.6], to: [394, 737.4], label: "1100" },
+    { from: [0, 905], to: [262.5, 905], label: "2625" },
+    { from: [248, 621], to: [248, 982], label: "3610" },
+    { from: [269.7, 790], to: [514, 790], label: "2445" },
+    { from: [404, 744.6], to: [404, 982], label: "2375" }
+  ],
+  // Shared by all first-floor layouts (bedrooms). Bathroom variants are in layouts.
+  furniture: [
+    { id: "bed-sk1", label: "Bed 180x200", x: 0, y: 85, w: 200, d: 180, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false },
+    { id: "nst-sk1-a", label: "Bedside", x: 0, y: 40, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+    { id: "nst-sk1-b", label: "Bedside", x: 0, y: 265, w: 40, d: 45, rotation: 0, color: "#e3d5b8", shape: "rect", solid: false },
+    { id: "wardrobe-sk1", label: "Built-in wardrobe 374 (full wall)", x: 454, y: 0, w: 60, d: 374.4, rotation: 0, color: "#b8a48a", shape: "rect", note: "Integrated wardrobe along the full right party wall (374 cm, 60 deep). Left wall has the bed and the pipe shaft; the right wall is clear of the door swing and 14 cm clear of the right garden window." },
+    { id: "bunk-sk2", label: "Bunk bed (stapelbed) 90x200", x: 0, y: 621, w: 90, d: 200, rotation: 0, color: "#c9b8d9", shape: "rect", measure: true, zones: false, note: "Against the left party wall and the bathroom wall: clear of the door swing and away from the window (top bunk does not block it)." },
+    { id: "desk-sk2", label: "Kids desk 100x50", x: 162, y: 932, w: 100, d: 50, rotation: 0, color: "#a3c4dc", shape: "rect" },
+    { id: "play-sk2", label: "Play rug / toy space", x: 100, y: 760, w: 140, d: 120, rotation: 0, color: "#f2e3a6", shape: "rect", solid: false },
+    { id: "desk-sk3", label: "Desk 120x90", x: 352, y: 892, w: 120, d: 90, rotation: 0, color: "#a3c4dc", shape: "rect", measure: true, zones: false, note: "Facing the front window (over the garden)." },
+    { id: "chair-sk3", label: "Office chair zone 70", x: 372, y: 822, w: 80, d: 70, rotation: 0, color: "#dfe9f1", shape: "rect", solid: false, measure: true, zones: false },
+    { id: "books-sk3", label: "Bookcase 130x30", x: 270, y: 850, w: 30, d: 130, rotation: 0, color: "#b8a48a", shape: "rect" }
+  ],
+  defaultLayout: "bath-instead-of-shower",
+  layouts: [
+    { id: "bath-instead-of-shower", label: "Bath 170x75 instead of the shower (washer/dryer stays)", notes: [
+      "Bath 170x75 along the bathroom/bedroom-2 wall where the shower was (x 0-170); washer/dryer stack stays on its drawn spot (11 cm gap to the bath). Shower over the bath (screen + mixer) if you still want to shower.",
+      "70 cm free between the WC front and the bath; 97 cm between the basin and the bath.",
+      "180x80 does NOT fit with the washer/dryer where it is (would need x 0-180, the stack starts at 181). It fits only if the wd/wm connections move ~20 cm towards the landing wall (stack at x 202-262): ask UBA."
+    ], items: [
+      { id: "bath", label: "Bath 170x75", x: 0, y: 535, w: 170, d: 75, rotation: 0, color: "#cfe3f2", shape: "rect", measure: true, zones: false },
+      { id: "wdwm", label: "Washer/dryer stack 60x60", x: 181, y: 545, w: 60, d: 60, rotation: 0, color: "#e0e0e0", shape: "rect" }
+    ]},
+    { id: "bath-instead-of-washer", label: "Bath 160x70 instead of the washer/dryer (shower stays)", notes: [
+      "Only 171.5 cm between the shower (90x90 in the left corner) and the landing wall, before tiling (~168 after). A 170 bath is on the limit and will not fit after tiling; realistic: 160x70 (shown, x 102-262) or 165x70.",
+      "Washer/dryer stack (60x60, stacked) moves to the techniek room, against the bedroom-3 wall (x 386-446, y 677-737). Free floor there is ~71 x 94 cm; the stack fits but leaves only ~33 cm to the manifold and ~11 cm to the WTW side, so WTW filter/manifold access gets cramped. Needs cold water, a drain (WTW condensate drain is there) and a socket: ask UBA. Use a heat-pump/condenser dryer (no vent).",
+      "Other spots checked: landing (108 wide) leaves under 50 cm to pass - no; master bedroom corner next to the pipe shaft or a wardrobe module would work technically (water/drain from the shaft) but puts laundry noise in the bedroom."
+    ], items: [
+      { id: "bath", label: "Bath 160x70", x: 102.5, y: 540, w: 160, d: 70, rotation: 0, color: "#cfe3f2", shape: "rect", measure: true, zones: false },
+      { id: "shower", label: "Shower 90x90", x: 0, y: 520, w: 91, d: 90, rotation: 0, color: "#e8f1f7", shape: "rect" },
+      { id: "wdwm", label: "Washer/dryer stack 60x60", x: 386, y: 677, w: 60, d: 60, rotation: 0, color: "#e0e0e0", shape: "rect", measure: true, zones: false, note: "Moved to the techniek room in this variant." }
+    ]}
+  ]
+};
+
+</script>
+</head>
+<body>
+<div id="stage">
+  <header><h1 id="title"></h1><div class="sub" id="subtitle"></div><div id="tabs" role="tablist"><button data-floor="0" role="tab">Ground floor</button><button data-floor="1" role="tab">First floor</button></div></header>
+  <div id="svgwrap"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+</div>
+<button id="btnDrawer" aria-controls="sidebar" aria-expanded="false">&#9776; Items</button>
+<div id="backdrop"></div>
+<aside id="sidebar">
+  <h2>Layout</h2>
+  <select id="layoutSel" style="width:100%;font:inherit;padding:4px"></select>
+  <label id="wallRow" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="wallChk"> Remove hall wall (hypothetical, needs builder approval)</label>
+  <h2>Items <span class="note">(tick = shown, click = select, drag on plan)</span></h2>
+  <div id="items"></div>
+  <h2>Selected</h2>
+  <div id="selbox" class="note">Click an item.</div>
+  <h2>Clearances</h2>
+  <div class="legend note"><span class="bad">&lt; 90 too tight</span><span class="warn">90-119 ok/min</span><span class="ok">&ge; 120 comfortable</span></div>
+  <div id="clear"></div>
+  <p class="note">Dashed boxes around a measured island: orange = 90 cm, green = 120 cm. Red door swing = island blocks that door.</p>
+  <h2>Notes</h2>
+  <ul id="notes" class="note" style="padding-left:16px;margin:0"></ul>
+  <h2>Config</h2>
+  <button id="btnExport">Export config</button><button id="btnDownload">Download plan.js</button><button id="btnReset">Reset</button>
+  <textarea id="out" style="display:none" spellcheck="false"></textarea>
+  <p class="note">Keys: arrows move the selected item 1 cm (Shift = 10 cm), R rotates 90&deg;, H hides it. Units: cm, origin = inside corner of the back (terrace) facade / left party wall.</p>
+  <p class="note" id="source"></p>
+</aside>
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const ORIGINAL = JSON.parse(JSON.stringify(window.PLAN));
+  let P = JSON.parse(JSON.stringify(window.PLAN));
+  let selId = null;
+  const svg = document.getElementById("svg");
+  // Floors: 0 = ground floor (the top-level PLAN), 1 = PLAN.firstFloor (same schema). Each floor keeps its own layout choice.
+  let floor = 0;
+  const layoutIds = {};
+  const F = () => (floor === 1 && P.firstFloor) ? P.firstFloor : P;
+  const size = () => F().size || [514, 982];
+  let layoutId = null;
+  const cur = () => (F().layouts || []).find(l => l.id === layoutId);
+  const items = () => [...((cur() || {}).items || []), ...(F().furniture || [])];
+  function pickLayout(id) {
+    const fl = F(), ls = fl.layouts || [];
+    layoutId = ls.some(l => l.id === id) ? id : (ls.some(l => l.id === fl.defaultLayout) ? fl.defaultLayout : (ls[0] || {}).id);
+    layoutIds[floor] = layoutId;
+  }
+  function setFloor(n) {
+    n = (n === 1 && P.firstFloor) ? 1 : 0;
+    if (n === floor && layoutId) return;
+    layoutIds[floor] = layoutId; floor = n; selId = null; pickLayout(layoutIds[floor]);
+  }
+
+  // URL hash: #show=id1,id2&hide=id3
+  (function applyHash() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const show = (h.get("show") || "").split(",").filter(Boolean);
+    const hide = (h.get("hide") || "").split(",").filter(Boolean);
+    const only = (h.get("only") || "").split(",").filter(Boolean);
+    floor = h.get("floor") === "1" && P.firstFloor ? 1 : 0;
+    pickLayout(h.get("layout"));
+    if (h.get("wall") === "off") P.hallWall.removed = true;
+    if (h.get("wall") === "on") P.hallWall.removed = false;
+    items().forEach(f => {
+      if (only.length) f.hidden = !only.includes(f.id);
+      if (show.includes(f.id)) f.hidden = false;
+      if (hide.includes(f.id)) f.hidden = true;
+    });
+    if (h.get("sel")) selId = h.get("sel");
+  })();
+
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const r1 = v => Math.round(v);
+
+  // ---------- geometry ----------
+  function aabb(f) {
+    if (f.shape === "circle") return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.w };
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2, a = (f.rotation || 0) * Math.PI / 180;
+    const hw = (Math.abs(Math.cos(a)) * f.w + Math.abs(Math.sin(a)) * f.d) / 2;
+    const hd = (Math.abs(Math.sin(a)) * f.w + Math.abs(Math.cos(a)) * f.d) / 2;
+    return { x0: cx - hw, y0: cy - hd, x1: cx + hw, y1: cy + hd };
+  }
+  const rectBox = r => ({ x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.d });
+  // footprint incl. chair zone: clearance.sides on the long sides, clearance.ends on the short ends
+  function effBox(f) {
+    const b = aabb(f), c = f.clearance; if (!c) return b;
+    const longX = (b.x1 - b.x0) >= (b.y1 - b.y0), ex = longX ? (c.ends || 0) : (c.sides || 0), ey = longX ? (c.sides || 0) : (c.ends || 0);
+    return { x0: b.x0 - ex, y0: b.y0 - ey, x1: b.x1 + ex, y1: b.y1 + ey };
+  }
+  const wallOff = () => floor === 0 && !!(P.hallWall && P.hallWall.removed);
+  const liveWalls = () => F().walls.filter(w => !(w.removable && wallOff()));
+  const liveDoors = () => F().doors.filter(d => !(d.removable && wallOff()));
+
+  function obstacles(selfId) {
+    const list = [];
+    liveWalls().forEach(w => list.push({ id: w.id, label: w.label, box: rectBox(w) }));
+    F().fixed.filter(f => f.solid).forEach(f => list.push({ id: f.id, label: f.label, box: rectBox(f) }));
+    items().filter(f => !f.hidden && f.id !== selfId && f.solid !== false && !["hob", "sink", "bar"].includes(f.kind)).forEach(f => list.push({ id: f.id, label: f.clearance ? f.label + " (chair zone)" : f.label, box: effBox(f) }));
+    return list;
+  }
+
+  // nearest obstacle in each direction among obstacles whose perpendicular span overlaps
+  function gaps(f) {
+    const b = effBox(f), obs = obstacles(f.id), res = {}, bd = f.band || 0;
+    const ov = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0);
+    const dirs = {
+      left:  o => ov(b.y0 - bd, b.y1 + bd, o.y0, o.y1) > 0.5 && o.x1 <= b.x0 + 0.5 ? b.x0 - o.x1 : null,
+      right: o => ov(b.y0 - bd, b.y1 + bd, o.y0, o.y1) > 0.5 && o.x0 >= b.x1 - 0.5 ? o.x0 - b.x1 : null,
+      up:    o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y1 <= b.y0 + 0.5 ? b.y0 - o.y1 : null,
+      down:  o => ov(b.x0, b.x1, o.x0, o.x1) > 0.5 && o.y0 >= b.y1 - 0.5 ? o.y0 - b.y1 : null
+    };
+    for (const d in dirs) {
+      let best = null;
+      obs.forEach(o => {
+        const g = dirs[d](o.box);
+        if (g !== null && (best === null || g < best.gap)) best = { gap: Math.max(0, g), obs: o };
+      });
+      res[d] = best;
+    }
+    return { box: b, gaps: res };
+  }
+
+  function doorConflicts(f) {
+    const b = effBox(f), hits = [];
+    liveDoors().forEach(dr => {
+      const [hx, hy] = dr.hinge;
+      let a0 = dr.closed, a1 = dr.open;
+      let span = ((a1 - a0) % 360 + 540) % 360 - 180; // signed shortest sweep
+      let hit = false;
+      for (let i = 0; i <= 24 && !hit; i++) {
+        const a = (a0 + span * i / 24) * Math.PI / 180;
+        for (let r = 4; r <= dr.width; r += 4) {
+          const x = hx + r * Math.cos(a), y = hy + r * Math.sin(a);
+          if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) { hit = true; break; }
+        }
+      }
+      if (hit) hits.push(dr);
+    });
+    return hits;
+  }
+
+  const cls = g => g < P.clearance.min ? "bad" : g < P.clearance.comfort ? "warn" : "ok";
+  const col = g => g < P.clearance.min ? "#c62828" : g < P.clearance.comfort ? "#e08a00" : "#1a7f37";
+
+  // ---------- render ----------
+  function render() {
+    svg.innerHTML = "";
+    const m = P.view.margin;
+    const [W, D] = size();
+    const SD = F().sides || P.sides || { top: "BACK", bottom: "FRONT" };
+    // extra room below the plan for doors that swing outwards past the front facade (e.g. B102 French doors)
+    const outBelow = Math.max(0, ...F().doors.filter(d => d.hinge[1] > D).map(d => d.hinge[1] + d.width - D - 40));
+    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70 + outBelow}`);
+    const defs = el("defs", {}, svg);
+    const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("line", { x1: 0, y1: 0, x2: 0, y2: 8, stroke: "#999", "stroke-width": 1.5 }, hatch);
+    const th = el("pattern", { id: "tallhatch", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("rect", { x: 0, y: 0, width: 7, height: 7, fill: "#6f6658" }, th);
+    el("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "#a39a8c", "stroke-width": 2 }, th);
+    const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,1 L9,5 L0,9 z", fill: "#555" }, mk);
+
+    // grid
+    const g = el("g", {}, svg);
+    for (let x = 0; x <= W; x += P.view.grid) el("line", { x1: x, y1: 0, x2: x, y2: D, stroke: x % P.view.gridMajor ? "#eee" : "#ddd", "stroke-width": 0.6 }, g);
+    for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#eee" : "#ddd", "stroke-width": 0.6 }, g);
+
+    // rooms
+    F().rooms.forEach(rm => {
+      el("polygon", { points: rm.points.map(p => p.join(",")).join(" "), fill: (rm.id === "gang" && wallOff()) ? "#fbf8f1" : (rm.fill || "#fafafa"), "fill-opacity": 0.85, stroke: "none" }, svg);
+    });
+    // regrid over rooms (light)
+    const g2 = el("g", { opacity: 0.6 }, svg);
+    for (let x = 0; x <= W; x += P.view.grid) el("line", { x1: x, y1: 0, x2: x, y2: D, stroke: x % P.view.gridMajor ? "#ececec" : "#d8d8d8", "stroke-width": 0.6 }, g2);
+    for (let y = 0; y <= D; y += P.view.grid) el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: y % P.view.gridMajor ? "#ececec" : "#d8d8d8", "stroke-width": 0.6 }, g2);
+
+    // fixed
+    F().fixed.forEach(f => {
+      const fill = { kitchen: "#d7d2c8", stair: "url(#hatch)", core: "none", boxing: "#cfcfcf", appliance: "none", zone: "#e3f1da" }[f.kind] || "#ddd";
+      if (f.kind === "core") return;
+      if (f.kind === "zone") { el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, "fill-opacity": 0.6, stroke: "#4a7a3a", "stroke-width": 1, "stroke-dasharray": "5 3" }, svg); return; }
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill, stroke: "#555", "stroke-width": f.kind === "appliance" ? 0.8 : 1.2, "stroke-dasharray": f.kind === "appliance" ? "3 2" : "" }, svg);
+      if (f.shape === "hob") [[0.3, 0.25], [0.7, 0.25], [0.3, 0.72], [0.7, 0.72]].forEach(([a, b]) => el("circle", { cx: f.x + a * f.w, cy: f.y + b * f.d, r: 9, fill: "none", stroke: "#555", "stroke-width": 0.8 }, svg));
+      if (f.shape === "sink") el("rect", { x: f.x + 6, y: f.y + 8, width: f.w - 12, height: f.d - 16, rx: 6, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, svg);
+    });
+    // walls
+    F().walls.forEach(w => {
+      if (w.removable && wallOff()) el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: "none", stroke: "#c62828", "stroke-width": 1, "stroke-dasharray": "4 3" }, svg);
+      else el("rect", { x: w.x, y: w.y, width: w.w, height: w.d, fill: w.kind === "inner" ? "#888" : "#555", stroke: "none" }, svg);
+    });
+    // windows
+    F().windows.forEach(wn => {
+      const out = wn.y1 <= 0 ? -1 : 1; // outward = towards the garden (y 0) or the street (y D)
+      el("line", { x1: wn.x1, y1: wn.y1 + 15 * out, x2: wn.x2, y2: wn.y2 + 15 * out, stroke: "#fff", "stroke-width": 26 }, svg);
+      [-22, -15, -8].forEach(o => { const s = -out; el("line", { x1: wn.x1, y1: wn.y1 + o * s, x2: wn.x2, y2: wn.y2 + o * s, stroke: "#4a90c2", "stroke-width": 1.2 }, svg); });
+    });
+    // doors
+    liveDoors().forEach(dr => {
+      const [hx, hy] = dr.hinge, rad = a => a * Math.PI / 180;
+      const pc = [hx + dr.width * Math.cos(rad(dr.closed)), hy + dr.width * Math.sin(rad(dr.closed))];
+      const po = [hx + dr.width * Math.cos(rad(dr.open)), hy + dr.width * Math.sin(rad(dr.open))];
+      const span = ((dr.open - dr.closed) % 360 + 540) % 360 - 180;
+      // gap in wall
+      el("line", { x1: hx, y1: hy, x2: pc[0], y2: pc[1], stroke: "#fff", "stroke-width": dr.gap === false || dr.hinge[1] === 0 || dr.hinge[1] === D ? 0 : 9 }, svg);
+      dr._el = el("path", { d: `M${hx},${hy} L${po[0]},${po[1]} A${dr.width},${dr.width} 0 0 ${span > 0 ? 0 : 1} ${pc[0]},${pc[1]} Z`, fill: "#f0e6d0", "fill-opacity": 0.45, stroke: "#8a7a5a", "stroke-width": 0.9, "stroke-dasharray": "4 3" }, svg);
+      el("line", { x1: hx, y1: hy, x2: po[0], y2: po[1], stroke: "#5a4a2a", "stroke-width": 2.2 }, svg);
+    });
+    // labels for rooms & fixed
+    F().rooms.forEach(rm => {
+      const xs = rm.points.map(p => p[0]), ys = rm.points.map(p => p[1]);
+      const [lx, ly] = rm.labelAt || [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+      txt(lx, ly, rm.label, { size: 13, fill: "#999", anchor: "middle", weight: 600 });
+    });
+    F().fixed.forEach(f => {
+      if (f.kind === "appliance" && f.shape) return;
+      if (f.kind === "core") return;
+      if (f.labelAt) { txt(f.labelAt[0], f.labelAt[1], f.label, { size: f.labelSize || 8, fill: f.labelFill || (f.kind === "zone" ? "#3d6b2f" : "#333"), anchor: "middle", rotate: f.labelRotate || 0 }); return; }
+      if (f.d > f.w * 1.5) { txt(f.x + f.w / 2, f.y + f.d / 2, f.label, { size: 9, fill: "#333", anchor: "middle", rotate: -90 }); return; }
+      const parts = f.label.length * 4.6 > f.w && f.label.includes(" (") ? [f.label.slice(0, f.label.indexOf(" (")), f.label.slice(f.label.indexOf(" (") + 1)] : [f.label];
+      parts.forEach((t, i) => txt(f.x + f.w / 2, f.y + f.d / 2 + 3 + (i - (parts.length - 1) / 2) * 10, t, { size: 8.5, fill: "#333", anchor: "middle" }));
+    });
+    txt(W / 2, -48, SD.top, { size: 12, fill: "#8a6a3a", anchor: "middle", weight: 700 });
+    txt(W / 2, D + 58 + outBelow, SD.bottom, { size: 12, fill: "#4a7a3a", anchor: "middle", weight: 700 });
+
+    // dims
+    F().dims.forEach(dm => dim(dm.from, dm.to, dm.label));
+
+    // clearance zones + furniture
+    const measured = items().filter(f => !f.hidden && f.measure);
+    measured.filter(f => f.zones !== false).forEach(f => {
+      const b = aabb(f);
+      P.clearance.zones.slice().reverse().forEach((z, i) => {
+        el("rect", { x: b.x0 - z, y: b.y0 - z, width: b.x1 - b.x0 + 2 * z, height: b.y1 - b.y0 + 2 * z, rx: 6, fill: "none", stroke: i === 0 ? "#1a7f37" : "#e08a00", "stroke-width": 1, "stroke-dasharray": "6 4", opacity: 0.8 }, svg);
+      });
+    });
+    items().forEach(f => { if (!f.hidden) drawItem(f); });
+    // measurement lines
+    measured.forEach(f => {
+      const { box: b, gaps: gs } = gaps(f);
+      for (const d in gs) {
+        const best = gs[d]; if (!best || best.gap > 400 || best.gap < 1) continue;
+        const o = best.obs.box;
+        let x1, y1, x2, y2;
+        if (d === "left" || d === "right") {
+          const y = (Math.max(b.y0, o.y0) + Math.min(b.y1, o.y1)) / 2;
+          x1 = d === "left" ? b.x0 : b.x1; x2 = d === "left" ? b.x0 - best.gap : b.x1 + best.gap; y1 = y2 = y;
+        } else {
+          const x = (Math.max(b.x0, o.x0) + Math.min(b.x1, o.x1)) / 2;
+          y1 = d === "up" ? b.y0 : b.y1; y2 = d === "up" ? b.y0 - best.gap : b.y1 + best.gap; x1 = x2 = x;
+        }
+        const c = col(best.gap);
+        el("line", { x1, y1, x2, y2, stroke: c, "stroke-width": 1.6, "marker-start": "url(#arr)", "marker-end": "url(#arr)" }, svg);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        const lab = r1(best.gap) + " cm";
+        const horiz = d === "left" || d === "right";
+        el("rect", { x: mx - 20, y: my - (horiz ? 17 : 7), width: 40, height: 13, rx: 3, fill: "#fff", stroke: c, "stroke-width": 0.8 }, svg);
+        txt(mx, my - (horiz ? 7 : -3), lab, { size: 10, fill: c, anchor: "middle", weight: 700 });
+      }
+      doorConflicts(f).forEach(dr => { dr._el.setAttribute("stroke", "#c62828"); dr._el.setAttribute("fill", "#f6c3c3"); dr._el.setAttribute("stroke-dasharray", ""); dr._el.setAttribute("stroke-width", 1.6); });
+    });
+
+    // scale bar
+    const sb = el("g", { transform: `translate(0, ${D + 72 + outBelow})` }, svg);
+    for (let i = 0; i < 3; i++) el("rect", { x: i * 100, y: 0, width: 100, height: 8, fill: i % 2 ? "#fff" : "#333", stroke: "#333", "stroke-width": 1 }, sb);
+    [0, 100, 200, 300].forEach(v => txt(v, 22, v === 300 ? "3 m" : String(v / 100), { size: 10, anchor: "middle", parent: sb }));
+    txt(320, 8, "scale (cm grid: 50 light / 100 dark)", { size: 9, fill: "#777", parent: sb });
+
+    renderPanel();
+  }
+
+  function txt(x, y, s, o = {}) {
+    const t = el("text", { x, y, "font-size": o.size || 10, fill: o.fill || "#222", "text-anchor": o.anchor || "start", "font-weight": o.weight || 400, "font-family": "Helvetica, Arial, sans-serif" }, o.parent || svg);
+    if (o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
+    t.textContent = s; return t;
+  }
+  function dim(a, b, label) {
+    el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "#777", "stroke-width": 0.7, "marker-start": "url(#arr)", "marker-end": "url(#arr)" }, svg);
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, vert = a[0] === b[0];
+    txt(mx + (vert ? -4 : 0), my - 3, label, { size: 9, fill: "#666", anchor: "middle", rotate: vert ? -90 : 0 });
+  }
+
+  function drawItem(f) {
+    const gI = el("g", { class: "furn" + (f.id === selId ? " sel" : ""), "data-id": f.id }, svg);
+    gI.addEventListener("pointerdown", ev => startDrag(ev, f));
+    if (f.kind) return drawKitchen(f, gI);
+    if (f.clearance) {
+      const z = effBox(f);
+      el("rect", { x: z.x0, y: z.y0, width: z.x1 - z.x0, height: z.y1 - z.y0, rx: 4, fill: f.color || "#ccc", "fill-opacity": 0.22, stroke: f.color || "#999", "stroke-width": 1, "stroke-dasharray": "5 3" }, gI);
+      txt((z.x0 + z.x1) / 2, z.y0 + 11, `chair zone ${f.clearance.sides || 0} cm`, { size: 7.5, anchor: "middle", parent: gI, fill: "#46708f" });
+    }
+    if (f.shape === "circle") {
+      el("ellipse", { cx: f.x + f.w / 2, cy: f.y + f.w / 2, rx: f.w / 2, ry: f.w / 2, fill: f.color || "#ccc", "fill-opacity": 0.85, stroke: "#333", "stroke-width": 1.2 }, gI);
+      txt(f.x + f.w / 2, f.y + f.w / 2 - 2, f.label.replace(" (placeholder)", ""), { size: 8.5, anchor: "middle", parent: gI });
+      txt(f.x + f.w / 2, f.y + f.w / 2 + 10, `Ø${f.w}`, { size: 8.5, anchor: "middle", parent: gI, weight: 700 });
+      if (/placeholder/i.test(f.label)) txt(f.x + f.w / 2, f.y + f.w / 2 + 20, "placeholder", { size: 7.5, anchor: "middle", parent: gI, fill: "#666" });
+    } else {
+      const cx = f.x + f.w / 2, cy = f.y + f.d / 2;
+      const inner = el("g", { transform: `rotate(${f.rotation || 0} ${cx} ${cy})` }, gI);
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, rx: 2, fill: f.color || "#ccc", "fill-opacity": 0.85, stroke: "#333", "stroke-width": 1.2 }, inner);
+      if (f.image) el("image", { href: f.image, x: f.x, y: f.y, width: f.w, height: f.d, preserveAspectRatio: "xMidYMid slice", opacity: 0.9 }, inner);
+      const vert = f.d > f.w * 1.4;
+      const tg = el("g", { transform: vert ? `rotate(-90 ${cx} ${cy})` : "" }, inner);
+      const name = f.label.replace(" (placeholder)", "");
+      txt(cx, cy - 3, name, { size: 9, anchor: "middle", parent: tg, weight: 600 });
+      const long = Math.max(f.w, f.d), short = Math.min(f.w, f.d);
+      txt(cx, cy + 9, `${long} × ${short} cm`, { size: 9, anchor: "middle", parent: tg });
+      if (/placeholder/i.test(f.label)) txt(cx, cy + 19, "(placeholder)", { size: 7.5, anchor: "middle", parent: tg, fill: "#555" });
+    }
+  }
+
+  function drawKitchen(f, g) {
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2, vert = f.d > f.w * 1.4;
+    const lab = (a, b, o = {}) => {
+      const tg = el("g", { transform: vert ? `rotate(-90 ${cx} ${cy})` : "" }, g);
+      txt(cx, cy - (b ? 2 : -3), a, { size: o.size || 8.5, anchor: "middle", parent: tg, weight: 600, fill: o.fill || "#222" });
+      if (b) txt(cx, cy + 9, b, { size: 8, anchor: "middle", parent: tg, fill: o.fill || "#222" });
+    };
+    if (f.kind === "base") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: f.color || "#e6dfd0", stroke: "#4a4a4a", "stroke-width": 1.2 }, g);
+      el("rect", { x: f.x + 2, y: f.y + 2, width: f.w - 4, height: f.d - 4, fill: "none", stroke: "#b5ab98", "stroke-width": 0.6 }, g);
+      lab(f.label, `${Math.max(f.w, f.d)} × ${Math.min(f.w, f.d)} base`);
+    } else if (f.kind === "tall") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "url(#tallhatch)", stroke: "#222", "stroke-width": 1.6 }, g);
+      el("line", { x1: f.x, y1: f.y, x2: f.x + f.w, y2: f.y + f.d, stroke: "#222", "stroke-width": 0.6 }, g);
+      el("line", { x1: f.x + f.w, y1: f.y, x2: f.x, y2: f.y + f.d, stroke: "#222", "stroke-width": 0.6 }, g);
+      const tg = el("g", {}, g);
+      el("rect", { x: cx - 27, y: cy - 10, width: 54, height: 21, rx: 2, fill: "#fff", "fill-opacity": 0.9 }, tg);
+      txt(cx, cy - 1, f.label.replace(" tall unit", "").replace("Storage tall", "Storage"), { size: 7, anchor: "middle", parent: tg, weight: 700 });
+      txt(cx, cy + 8, `TALL ${f.w}×${f.d}`, { size: 6.5, anchor: "middle", parent: tg });
+    } else if (f.kind === "bar") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "#f3ecdc", "fill-opacity": 0.8, stroke: "#8a7a5a", "stroke-width": 0.9, "stroke-dasharray": "4 2" }, g);
+      lab(f.label, null, { size: 7.5, fill: "#6b5b3b" });
+      const n = Math.max(1, Math.floor(f.w / 55));
+      for (let i = 0; i < n; i++) el("circle", { cx: f.x + f.w * (i + 0.5) / n, cy: f.y - 18, r: 17, fill: "#fff", stroke: "#8a7a5a", "stroke-width": 0.8, "stroke-dasharray": "2 2" }, g);
+    } else if (f.kind === "hob") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, fill: "#3a3a3a", "fill-opacity": 0.12, stroke: "#333", "stroke-width": 0.8 }, g);
+      [[0.3, 0.27], [0.7, 0.27], [0.3, 0.73], [0.7, 0.73]].forEach(([a, b]) => el("circle", { cx: f.x + a * f.w, cy: f.y + b * f.d, r: Math.min(f.w, f.d) * 0.17, fill: "none", stroke: "#333", "stroke-width": 0.9 }, g));
+    } else if (f.kind === "sink") {
+      el("rect", { x: f.x, y: f.y, width: f.w, height: f.d, rx: 4, fill: "#dfe9f1", stroke: "#333", "stroke-width": 0.8 }, g);
+      el("rect", { x: f.x + 5, y: f.y + 5, width: f.w - 10, height: f.d - 10, rx: 5, fill: "#fff", stroke: "#555", "stroke-width": 0.8 }, g);
+      el("circle", { cx: cx, cy: cy, r: 2.5, fill: "#555" }, g);
+    }
+  }
+
+  // ---------- interaction ----------
+  let drag = null, raf = 0;
+  function svgPt(ev) { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function startDrag(ev, f) {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation(); selId = f.id;
+    const p = svgPt(ev); drag = { f, dx: p.x - f.x, dy: p.y - f.y, id: ev.pointerId };
+    svg.classList.add("dragging"); document.body.classList.add("dragging");
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+    // Re-render on the next frame, not synchronously: the touched element must stay in the DOM until
+    // its touchstart has bubbled to our non-passive listener (otherwise preventDefault never runs and the page pans).
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); });
+  }
+  function endDrag(ev) {
+    if (!drag || (ev && ev.pointerId !== undefined && ev.pointerId !== drag.id)) return;
+    try { svg.releasePointerCapture(drag.id); } catch (e) {}
+    drag = null; svg.classList.remove("dragging"); document.body.classList.remove("dragging");
+    renderPanel();
+  }
+  svg.addEventListener("pointermove", ev => {
+    if (!drag || ev.pointerId !== drag.id) return;
+    ev.preventDefault();
+    const p = svgPt(ev);
+    drag.f.x = Math.round(p.x - drag.dx); drag.f.y = Math.round(p.y - drag.dy);
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); });
+  });
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("lostpointercapture", endDrag);
+  svg.addEventListener("pointerdown", ev => { if (ev.target === svg) { selId = null; render(); } });
+  // Touch: stop the browser from panning/zooming/long-press when a touch starts on furniture or during a drag.
+  // Touches on empty plan areas are left alone so normal page scroll / pinch still works.
+  const blockTouch = ev => { if (drag || (ev.target.closest && ev.target.closest(".furn"))) ev.preventDefault(); };
+  svg.addEventListener("touchstart", blockTouch, { passive: false });
+  svg.addEventListener("touchmove", blockTouch, { passive: false });
+  document.addEventListener("touchmove", ev => { if (drag) ev.preventDefault(); }, { passive: false });
+  svg.addEventListener("contextmenu", ev => { if (ev.target.closest && ev.target.closest(".furn")) ev.preventDefault(); });
+  // Mobile drawer
+  const setDrawer = open => { document.body.classList.toggle("drawer-open", open); document.getElementById("btnDrawer").setAttribute("aria-expanded", open); document.getElementById("btnDrawer").innerHTML = open ? "&#10005; Close" : "&#9776; Items"; };
+  document.getElementById("btnDrawer").onclick = () => setDrawer(!document.body.classList.contains("drawer-open"));
+  document.getElementById("backdrop").onclick = () => setDrawer(false);
+  window.addEventListener("keydown", ev => {
+    if (!selId || ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA") return;
+    const f = items().find(i => i.id === selId); if (!f) return;
+    const s = ev.shiftKey ? 10 : 1, k = ev.key;
+    if (k === "ArrowLeft") f.x -= s; else if (k === "ArrowRight") f.x += s;
+    else if (k === "ArrowUp") f.y -= s; else if (k === "ArrowDown") f.y += s;
+    else if (k === "r" || k === "R") rotate90(f);
+    else if (k === "h" || k === "H") f.hidden = true;
+    else return;
+    ev.preventDefault(); render();
+  });
+  function rotate90(f) { // swap w/d keeping centre: cleaner than angle for measuring
+    const cx = f.x + f.w / 2, cy = f.y + f.d / 2; [f.w, f.d] = [f.d, f.w]; f.x = Math.round(cx - f.w / 2); f.y = Math.round(cy - f.d / 2);
+  }
+
+  function renderPanel() {
+    const fm = F().meta || P.meta;
+    document.getElementById("title").textContent = fm.title;
+    document.getElementById("subtitle").textContent = (fm.subtitle || P.meta.subtitle) + " · " + P.meta.version;
+    document.querySelectorAll("#tabs button").forEach(b => { const on = Number(b.dataset.floor) === floor; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+    document.getElementById("wallRow").style.display = floor === 0 && P.hallWall ? "flex" : "none";
+    document.getElementById("wallChk").checked = wallOff();
+    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...((cur() || {}).notes || []), ...(fm.notes || [])].map(n => "<li>" + n + "</li>").join("");
+    const ls = document.getElementById("layoutSel");
+    const lsKey = floor + ":" + (F().layouts || []).map(l => l.id).join(",");
+    if (ls.dataset.key !== lsKey) { ls.innerHTML = (F().layouts || []).map(l => `<option value="${l.id}">${l.label}</option>`).join(""); ls.dataset.key = lsKey; }
+    ls.value = layoutId;
+    document.getElementById("source").textContent = "Source: " + fm.source;
+    const box = document.getElementById("items"); box.innerHTML = "";
+    items().forEach(f => {
+      const d = document.createElement("div"); d.className = "item" + (f.id === selId ? " sel" : "");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !f.hidden;
+      cb.onclick = e => { e.stopPropagation(); f.hidden = !cb.checked; render(); };
+      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = f.color || ({ base: "#e6dfd0", tall: "#6f6658", bar: "#f3ecdc", hob: "#555", sink: "#dfe9f1" }[f.kind]) || "#ccc";
+      const nm = document.createElement("span"); nm.textContent = f.label;
+      const dm = document.createElement("span"); dm.className = "dim"; dm.textContent = f.shape === "circle" ? `Ø${f.w}` : `${f.w}×${f.d}`;
+      d.append(cb, sw, nm, dm); d.onclick = () => { selId = f.id; render(); }; box.appendChild(d);
+    });
+    const sb = document.getElementById("selbox"); const f = items().find(i => i.id === selId);
+    if (!f) { sb.innerHTML = '<span class="note">Click an item.</span>'; }
+    else {
+      sb.innerHTML = `<div style="margin-bottom:4px"><b>${f.label}</b> <span class="note">(${f.id})</span>${f.note ? `<div class="note">${f.note}</div>` : ""}</div>`;
+      const ed = document.createElement("div"); ed.className = "edit";
+      ["x", "y", "w", "d", "rotation"].forEach(k => {
+        const l = document.createElement("label"); l.textContent = k === "rotation" ? "rot°" : k;
+        const i = document.createElement("input"); i.type = "number"; i.value = f[k] || 0;
+        i.onchange = () => { f[k] = Number(i.value); render(); }; l.appendChild(i); ed.appendChild(l);
+      });
+      sb.appendChild(ed);
+      const b = document.createElement("button"); b.textContent = "Rotate 90°"; b.onclick = () => { rotate90(f); render(); };
+      const m = document.createElement("button"); m.textContent = f.measure ? "Stop measuring" : "Measure clearances"; m.onclick = () => { f.measure = !f.measure; render(); };
+      sb.append(b, m);
+    }
+    const cl = document.getElementById("clear"); cl.innerHTML = "";
+    const measured = items().filter(i => !i.hidden && i.measure);
+    if (!measured.length) cl.innerHTML = '<span class="note">Tick an island (or set measure:true) to see clearances.</span>';
+    const SDn = F().sides || P.sides || {};
+    const names = { left: "← left", right: "→ right", up: SDn.up || "↑ up", down: SDn.down || "↓ down" };
+    measured.forEach(i => {
+      const { gaps: gs } = gaps(i);
+      let h = `<b>${i.label}</b> <span class="note">${i.w}×${i.d}</span><table class="m">`;
+      for (const d in gs) { const g = gs[d]; if (!g) continue; h += g.gap < 1 ? `<tr><td>${names[d]}</td><td class="note">attached</td><td class="note">${g.obs.label}</td></tr>` : `<tr><td>${names[d]}</td><td class="${cls(g.gap)}">${r1(g.gap)} cm</td><td class="note">${g.obs.label}</td></tr>`; }
+      const dc = doorConflicts(i);
+      if (dc.length) h += `<tr><td colspan="3" class="bad">Blocks door swing: ${dc.map(x => x.label).join(", ")}</td></tr>`;
+      cl.insertAdjacentHTML("beforeend", h + "</table>");
+    });
+  }
+
+  // ---------- export ----------
+  function serialize() {
+    const clean = (k, v) => k === "_el" ? undefined : v;
+    const out = JSON.parse(JSON.stringify(P, clean));
+    const head = "// House 24 floor planner config - exported " + new Date().toISOString().slice(0, 16) + "\n// One furniture item per line: x,y = top-left (cm), w along x, d along y.\nwindow.PLAN = ";
+    const fmt = (o, ind) => { // pretty-print a floor object, one furniture/layout item per line
+      const furn = o.furniture || [], lays = o.layouts || [];
+      const rest = { ...o }; delete rest.furniture; delete rest.layouts; delete rest.firstFloor;
+      const pad = " ".repeat(ind);
+      let s = JSON.stringify(rest, null, 2).replace(/\n}$/, "").replace(/\n/g, "\n" + pad);
+      s += ',\n' + pad + '  "furniture": [\n' + furn.map(f => pad + "    " + JSON.stringify(f)).join(",\n") + "\n" + pad + "  ]";
+      s += ',\n' + pad + '  "layouts": [\n' + lays.map(l => { const { items: it, ...r } = l; const h = JSON.stringify(r).replace(/}$/, ', "items": [\n'); return pad + "    " + h + it.map(i => pad + "      " + JSON.stringify(i)).join(",\n") + "\n" + pad + "    ]}"; }).join(",\n") + "\n" + pad + "  ]";
+      return s;
+    };
+    let s = fmt(out, 0);
+    if (out.firstFloor) s += ',\n  "firstFloor": ' + fmt(out.firstFloor, 2) + "\n  }";
+    return head + s + "\n};\n";
+  }
+  document.getElementById("btnExport").onclick = () => { const t = document.getElementById("out"); t.style.display = "block"; t.value = serialize(); t.select(); console.log(t.value); };
+  document.getElementById("btnDownload").onclick = () => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([serialize()], { type: "text/javascript" })); a.download = "plan.js"; a.click();
+  };
+  document.getElementById("btnReset").onclick = () => { P = JSON.parse(JSON.stringify(ORIGINAL)); selId = null; pickLayout(layoutId); render(); };
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { setFloor(Number(b.dataset.floor)); syncHash(); render(); });
+  document.getElementById("layoutSel").onchange = ev => {
+    pickLayout(ev.target.value); selId = null;
+    syncHash(); render();
+  };
+  const syncHash = () => history.replaceState(null, "", "#" + (floor === 1 ? "floor=1&" : "") + "layout=" + layoutId + (wallOff() ? "&wall=off" : ""));
+  document.getElementById("wallChk").onchange = ev => { P.hallWall.removed = ev.target.checked; syncHash(); render(); };
+  window.addEventListener("hashchange", () => {
+    const hp = new URLSearchParams(location.hash.slice(1)), id = hp.get("layout");
+    setFloor(hp.get("floor") === "1" ? 1 : 0);
+    if (hp.get("wall") && P.hallWall) P.hallWall.removed = hp.get("wall") === "off";
+    if (id && id !== layoutId) { pickLayout(id); selId = null; }
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
