@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>House 24 – 3D</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;overflow:hidden;font:14px sans-serif}#ui{position:absolute;top:8px;left:8px;background:#fffd;padding:8px;border-radius:6px;max-width:320px}
+button{margin:2px}#hint{font-size:12px;color:#444;margin-top:4px}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+</head><body><div id="ui"><b>House 24 – 3D model</b> <a href="../">2D planner</a><br>
+Floors: <button data-f="0">Ground</button><button data-f="1">+ First</button><button data-f="2">All</button><br>
+<button id="orbit">Orbit</button><button id="walk">Walk (WASD)</button><br>
+Jump: <button id="jtk">Heat pump / under-stair cupboard</button><button id="jtc">Technical room 1F</button>
+<div id="hint">Orbit: drag/scroll. Walk: click view, WASD + mouse, Esc to exit. Eye 1.6 m. Orange = assumed.</div></div>
+<script type="module">
+import * as THREE from 'three';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';import {PointerLockControls} from 'three/addons/controls/PointerLockControls.js';
+const FF=2.9,r=new THREE.WebGLRenderer({antialias:true});r.setPixelRatio(devicePixelRatio);r.setSize(innerWidth,innerHeight);document.body.appendChild(r.domElement);
+const s=new THREE.Scene();s.background=new THREE.Color(0xdde3ea);s.add(new THREE.HemisphereLight(0xffffff,0x888877,2.2));const d=new THREE.DirectionalLight(0xffffff,1.5);d.position.set(-5,12,-4);s.add(d);
+const cam=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.05,200);cam.position.set(-6,10,16);
+const orb=new OrbitControls(cam,r.domElement);orb.target.set(2.5,1,5);orb.update();const pl=new PointerLockControls(cam,document.body);
+let mode='orbit',level=0;const meshes=[];
+new GLTFLoader().load('house24.glb',g=>{s.add(g.scene);g.scene.traverse(o=>{if(o.isMesh){const b=new THREE.Box3().setFromObject(o);o.userData.f=b.min.y>=2*FF-0.35?2:b.min.y>=FF-0.35?1:0;meshes.push(o)}});setLevel(2);console.log('loaded',meshes.length)},undefined,e=>console.error(e));
+function setLevel(l){level=l;meshes.forEach(m=>m.visible=m.userData.f<=l)}
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>setLevel(+b.dataset.f));
+function walk(p,t){mode='walk';orb.enabled=false;cam.position.set(...p);cam.lookAt(...t);}
+document.getElementById('orbit').onclick=()=>{mode='orbit';orb.enabled=true;pl.unlock();cam.position.set(-6,10,16);orb.target.set(2.5,1,5);orb.update()};
+document.getElementById('walk').onclick=()=>walk([1.6,1.6,8.5],[1.6,1.6,4]);
+document.getElementById('jtk').onclick=()=>{setLevel(0);walk([2.7,1.6,5.75],[4.6,1.2,5.65])};
+document.getElementById('jtc').onclick=()=>{setLevel(1);walk([3.3,FF+1.6,6.78],[5,FF+1.3,6.78])};
+r.domElement.onclick=()=>{if(mode==='walk')pl.lock()};
+const k={};onkeydown=e=>k[e.code]=1;onkeyup=e=>k[e.code]=0;
+onresize=()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight)};
+const c=new THREE.Clock();r.setAnimationLoop(()=>{const dt=c.getDelta(),v=1.4*dt;if(mode==='walk'){if(k.KeyW)pl.moveForward(v);if(k.KeyS)pl.moveForward(-v);if(k.KeyD)pl.moveRight(v);if(k.KeyA)pl.moveRight(-v);}r.render(s,cam)});
+</script></body></html>

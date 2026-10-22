@@ -22,6 +22,7 @@ jobs:
           cp src/plan.js _site/plan.js
           cp README.md _site/README.md
           for f in screenshots/*.png.b64; do base64 -d "$f" > "_site/screenshots/$(basename "$f" .b64)"; done
+          mkdir -p _site/3d && cp 3d/index.html _site/3d/index.html && base64 -d 3d/house24.glb.b64 > _site/3d/house24.glb
           touch _site/.nojekyll
           ls -la _site _site/screenshots
       - name: Push to gh-pages
