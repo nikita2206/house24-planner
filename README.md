@@ -6,6 +6,7 @@ Units in cm; origin = inside corner of the back facade (achtergevel: living room
 - Live page: https://nikita2206.github.io/house24-planner/ (first floor: https://nikita2206.github.io/house24-planner/#floor=1)
 - First floor layouts: `#floor=1&layout=bath-instead-of-shower` (default) and `#floor=1&layout=bath-instead-of-washer`
 - First floor screenshots: https://nikita2206.github.io/house24-planner/screenshots/first-floor-desktop.png (default layout), `first-floor-bath-instead-of-shower-{desktop,mobile}.png`, `first-floor-bath-instead-of-washer-{desktop,mobile}.png`
+- Ground floor 1a + cabinets along the whole left wall: https://nikita2206.github.io/house24-planner/#layout=L-garden-tall-opposite-left-wall (screenshot `screenshots/layout-L-garden-tall-opposite-left-wall.png`)
 - Screenshots: https://nikita2206.github.io/house24-planner/screenshots/plan.png (also `plan-slim-island.png`, `plan-island-240x100.png`)
 
 ## Editing
