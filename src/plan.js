@@ -16,7 +16,7 @@ window.PLAN = {
     title: "House 24 - Ground floor (begane grond)",
     subtitle: "EASE Amsterdam Kavel 1A, Parkrand woning, bouwnummer 24 - UBA Bouw",
     source: "VK-B02-24 sales drawing 1:50 (16-07-2026). Indicative dimensions, excl. wall finish.",
-    version: "v6 - 2026-11-11 (+ layout 1a with cabinets along the whole left wall)",
+    version: "v6b - 2026-11-11 (+ layout 1a with 60 cm cabinets along the whole left wall)",
     notes: [
       "Kitchen zone between the kitchen run front (60 cm) and the toilet/trapkast wall is 268 cm wide (3285 minus the 60 cm run).",
       "Dimensions are indicative and exclude wall finish (drawing note); worktops are often 62-65 cm deep, which takes another 2-5 cm.",
@@ -95,6 +95,34 @@ window.PLAN = {
     { from: [490, 0], to: [490, 374], label: "3745 (drawing) / 374 measured" }
   ],
 
+  // ELECTRICAL LIGHT POINTS from the VK-B02-24 legend ("Renvooi installaties"): plafondlichtpunt = circle with X;
+  // wandlichtpunt = circle with X + stub to the wall; wandlichtpunt buiten = same, half filled. Letters = which switch controls it.
+  // Positions measured from the 1:50 PDF render (+-3 cm). Toggle "Show electrical light points" or #...&lights=1.
+  electrical: {
+    source: "VK-B02-24 (16-07-2026), ground floor, legend 'Renvooi installaties'. Indicative (drawing note).",
+    notes: [
+      "Light points (VK-B02-24 legend): the ground floor has NO indoor wall light points (aansluitpunt wandlichtpunt) - all indoor points are ceiling points. The only wall light points are the two OUTDOOR ones (wandlichtpunt buiten): bl3 on the terrace facade and bl2 at the front door.",
+      "Ceiling points: woonkamer f (centre), keuken e (over the kitchen run) and d (over the dining area), trapkast g, toilet c, gang b.",
+      "Switches: f on the trapkast wall by the stair; e+d double switch on the toilet wall (kitchen side); g in the trapkast; c in the toilet; b+bl2 double switch in the hall by the front door; bl3 inside next to the terrace door."
+    ],
+    points: [
+      { id: "lp-f",   type: "ceiling",  x: 257, y: 188,  label: "f",   room: "woonkamer", sw: "f" },
+      { id: "lp-e",   type: "ceiling",  x: 164, y: 578,  label: "e",   room: "keuken", sw: "e/d" },
+      { id: "lp-d",   type: "ceiling",  x: 164, y: 863,  label: "d",   room: "keuken / dining", sw: "e/d" },
+      { id: "lp-g",   type: "ceiling",  x: 365, y: 607,  label: "g",   room: "trapkast", sw: "g" },
+      { id: "lp-c",   type: "ceiling",  x: 404, y: 678,  label: "c",   room: "toilet", sw: "c" },
+      { id: "lp-b",   type: "ceiling",  x: 390, y: 859,  label: "b",   room: "gang", sw: "b/bl2" },
+      { id: "lp-bl3", type: "wall-out", x: 62,  y: -42,  label: "bl3", room: "terrace (outside, back facade)", sw: "bl3", wall: "top" },
+      { id: "lp-bl2", type: "wall-out", x: 398, y: 1033, label: "bl2", room: "front door (outside, front facade)", sw: "b/bl2", wall: "bottom" },
+      { id: "sw-f",   type: "switch",   x: 338, y: 477,  label: "f" },
+      { id: "sw-ed",  type: "switch",   x: 324, y: 724,  label: "e/d" },
+      { id: "sw-g",   type: "switch",   x: 346, y: 617,  label: "g" },
+      { id: "sw-c",   type: "switch",   x: 341, y: 714,  label: "c" },
+      { id: "sw-b",   type: "switch",   x: 343, y: 951,  label: "b/bl2" },
+      { id: "sw-bl3", type: "switch",   x: 64,  y: 4,    label: "bl3" }
+    ]
+  },
+
   // Common items shown in every layout (placeholders).
   furniture: [
     { id: "sofa", label: "Sofa (placeholder)", x: 419, y: 90, w: 95, d: 240, rotation: 0, color: "#b8b8d1", shape: "rect" },
@@ -153,14 +181,13 @@ window.PLAN = {
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60, measure: true, zones: false },
       { id: "dining", label: "Dining table 120x90", x: 84, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Turned lengthwise (chairs on the long sides) so ~80 cm stays free in front of the B102 French doors." }
     ]},
-    { id: "L-garden-tall-opposite-left-wall", label: "1a + cabinets along the whole left wall", notes: [
-      "Layout 1a unchanged (wall run 250, return leg 155 + bar, fridge/oven tall + storage tall), plus cabinets on every free stretch of the left party wall (982 cm, terrace to garden).",
-      "Living room (y 0-377): 40 cm deep storage wall, 377 cm long, full height. 40 instead of 60 keeps the living room wide (474 cm left to the right party wall) and 39 cm clear of the open terrace door; it stays left of the terrace glazing (glass starts at x 74).",
-      "WTW inspection hatch (y 377-411) is NOT built over: the box stays exposed between the storage wall and the kitchen run. Make the end side panel of the storage wall removable (screws/clips) so the hatch can be reached from above too. 5 cm filler between the hatch and the kitchen run.",
-      "Dining stretch (y 786-902, next to the table): 28 cm deep shallow tall cabinets, 116 cm (Billy-depth: glasses, plates, pantry jars). Deeper would push the chair zone into the hall door swing.",
-      "Front end (y 902-982, next to the B102 French doors): 60 cm deep tall cabinet, 80 cm wide (pantry/broom cupboard). It stops at x 60, 4 cm left of the B102 frame, and does not enter the 80 cm keep-clear zone in front of the doors.",
-      "Dining table shrunk from 120x90 to 120x80 and moved 9 cm right (x 93) so its 65 cm chair zones fit between the 28 cm cabinets and the hall wall without hitting the hall door swing. Chairs on the cabinet side leave no walkway behind them (chair zone touches the cabinets): open those doors with the chairs pushed in.",
-      "New storage on the left wall: 377 (40 deep) + 116 (28 deep) + 80 (60 deep) = 573 cm extra; with the kitchen (370) the wall carries 943 cm of cabinets, only the WTW box (34) and a 5 cm filler stay free."
+    { id: "L-garden-tall-opposite-left-wall", label: "1a + cabinets along the whole left wall (all 60 deep)", notes: [
+      "Layout 1a unchanged (wall run 250, return leg 155 + bar, fridge/oven tall + storage tall), plus 60 cm deep full-height cabinets on every free stretch of the left party wall (982 cm, terrace to garden): one depth everywhere, like the kitchen tall units.",
+      "Living room (y 0-377): storage wall 377 x 60. Left of the terrace glazing (glass starts at x 74); the open terrace door leaf (x 79) stays 19 cm in front of it. 240 cm free to the coffee table, 359 cm to the sofa.",
+      "WTW inspection hatch (y 377-411) is NOT built over: the box stays exposed between the storage wall and the kitchen run, reachable from the stool side under the bar overhang. Make the end side panel of the storage wall removable (screws/clips) for extra access. 5 cm filler between the hatch and the kitchen run.",
+      "Dining stretch (y 786-902): tall cabinets 116 x 60. Garden end (y 902-982, next to the B102 French doors): tall cabinet 80 x 60; stops 4 cm left of the B102 frame, outside the 80 cm keep-clear zone.",
+      "Dining table 120x90 kept, moved 41 cm right (x 125) so the 65 cm chair zone fits in front of the cabinets. Trade-off: the chair zone on the hall side now reaches the hall door swing (red) and leaves only ~49 cm to the hall wall. Fixes: chairs only on the cabinet side + table ends, a smaller/round table, or the hall door turned to swing into the hall (ask UBA).",
+      "New storage on the left wall: 377 + 116 + 80 = 573 cm, all 60 deep; with the kitchen (370) the wall carries 943 cm of cabinets, only the WTW box (34) and a 5 cm filler stay free."
     ], items: [
       { id: "k-run", label: "Wall run 250 (incl. corner)", kind: "base", x: 0, y: 416, w: 60, d: 250 },
       { id: "k-leg", label: "Return leg 155", kind: "base", x: 60, y: 416, w: 155, d: 60, measure: true, band: 70, zones: false },
@@ -169,10 +196,10 @@ window.PLAN = {
       { id: "k-hob", label: "Hob", kind: "hob", x: 5, y: 530, w: 50, d: 58 },
       { id: "k-tall", label: "Fridge/oven tall unit", kind: "tall", x: 0, y: 666, w: 60, d: 60 },
       { id: "k-store", label: "Storage tall 60", kind: "tall", x: 0, y: 726, w: 60, d: 60 },
-      { id: "lw-living", label: "Living storage wall 377x40", kind: "tall", x: 0, y: 0, w: 40, d: 377, measure: true, zones: false, note: "Full-height, 40 deep. End panel next to the WTW hatch removable." },
-      { id: "lw-dining", label: "Shallow tall 116x28", kind: "tall", x: 0, y: 786, w: 28, d: 116, note: "28 deep (Billy-depth) so the dining chairs still fit." },
+      { id: "lw-living", label: "Living storage wall 377x60", kind: "tall", x: 0, y: 0, w: 60, d: 377, measure: true, zones: false, note: "Full-height, 60 deep. End panel next to the WTW hatch removable." },
+      { id: "lw-dining", label: "Tall 116x60", kind: "tall", x: 0, y: 786, w: 60, d: 116 },
       { id: "lw-front", label: "Tall 80x60", kind: "tall", x: 0, y: 902, w: 60, d: 80, note: "Next to the B102 French doors, outside their keep-clear zone." },
-      { id: "dining", label: "Dining table 120x80", x: 93, y: 782, w: 80, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Shrunk to 80 wide and moved to x 93 so the chair zones fit between the shallow cabinets and the hall wall, clear of the hall door swing." }
+      { id: "dining", label: "Dining table 120x90", x: 125, y: 782, w: 90, d: 120, rotation: 0, color: "#a3c4dc", shape: "rect", clearance: { sides: 65, ends: 0 }, measure: true, zones: false, note: "Moved to x 125 so the cabinet-side chair zone fits; the hall-side chair zone reaches the hall door swing." }
     ]},
     { id: "L-garden-tall-corner", label: "1b: L at the living-room (terrace) end, storage tall at the leg end", notes: [
       "Same L as 1a, but the 60 cm storage tall unit closes the end of the return leg (acts as a room divider); leg worktop 95 cm.",

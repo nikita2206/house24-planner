@@ -70,6 +70,7 @@
   <h2>Layout</h2>
   <select id="layoutSel" style="width:100%;font:inherit;padding:4px"></select>
   <label id="wallRow" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="wallChk"> Remove hall wall (hypothetical, needs builder approval)</label>
+  <label id="lightsRow" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="lightsChk"> Show electrical light points (VK-B02-24)</label>
   <h2>Items <span class="note">(tick = shown, click = select, drag on plan)</span></h2>
   <div id="items"></div>
   <h2>Selected</h2>
@@ -112,6 +113,7 @@
     layoutIds[floor] = layoutId; floor = n; selId = null; pickLayout(layoutIds[floor]);
   }
 
+  let showLights = false;
   // URL hash: #show=id1,id2&hide=id3
   (function applyHash() {
     const h = new URLSearchParams(location.hash.slice(1));
@@ -122,6 +124,7 @@
     pickLayout(h.get("layout"));
     if (h.get("wall") === "off") P.hallWall.removed = true;
     if (h.get("wall") === "on") P.hallWall.removed = false;
+    showLights = h.get("lights") === "1";
     items().forEach(f => {
       if (only.length) f.hidden = !only.includes(f.id);
       if (show.includes(f.id)) f.hidden = false;
@@ -216,7 +219,7 @@
     const SD = F().sides || P.sides || { top: "BACK", bottom: "FRONT" };
     // extra room below the plan for doors that swing outwards past the front facade (e.g. B102 French doors)
     const outBelow = Math.max(0, ...F().doors.filter(d => d.hinge[1] > D).map(d => d.hinge[1] + d.width - D - 40));
-    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70 + outBelow}`);
+    svg.setAttribute("viewBox", `${-m - 40} ${-m - 30} ${W + 2 * m + 60} ${D + 2 * m + 70 + outBelow + (showLights && floor === 0 && P.electrical ? 60 : 0)}`);
     const defs = el("defs", {}, svg);
     const hatch = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
     el("line", { x1: 0, y1: 0, x2: 0, y2: 8, stroke: "#999", "stroke-width": 1.5 }, hatch);
@@ -325,6 +328,9 @@
       doorConflicts(f).forEach(dr => { dr._el.setAttribute("stroke", "#c62828"); dr._el.setAttribute("fill", "#f6c3c3"); dr._el.setAttribute("stroke-dasharray", ""); dr._el.setAttribute("stroke-width", 1.6); });
     });
 
+    // electrical light points overlay (ground floor)
+    if (showLights && floor === 0 && P.electrical) drawLights();
+
     // scale bar
     const sb = el("g", { transform: `translate(0, ${D + 72 + outBelow})` }, svg);
     for (let i = 0; i < 3; i++) el("rect", { x: i * 100, y: 0, width: 100, height: 8, fill: i % 2 ? "#fff" : "#333", stroke: "#333", "stroke-width": 1 }, sb);
@@ -332,6 +338,47 @@
     txt(320, 8, "scale (cm grid: 50 light / 100 dark)", { size: 9, fill: "#777", parent: sb });
 
     renderPanel();
+  }
+
+  // light points: covered = a wall point inside (or within 3 cm of) a cabinet/tall/base unit
+  function lightCover(pt) {
+    const hit = items().filter(f => !f.hidden && ["tall", "base"].includes(f.kind)).find(f => { const b = aabb(f); return pt.x > b.x0 - 3 && pt.x < b.x1 + 3 && pt.y > b.y0 - 3 && pt.y < b.y1 + 3; });
+    return hit || null;
+  }
+  function drawLights() {
+    const g = el("g", { "pointer-events": "none" }, svg);
+    const CEIL = "#1565c0", WALL = "#d81b60", SW = "#555";
+    P.electrical.points.forEach(pt => {
+      if (pt.type === "switch") {
+        el("circle", { cx: pt.x, cy: pt.y, r: 3.2, fill: "#fff", stroke: SW, "stroke-width": 1.2 }, g);
+        txt(pt.x - 5, pt.y + 3, "S " + pt.label, { size: 7, fill: SW, anchor: "end", parent: g, weight: 700 });
+        return;
+      }
+      const wall = pt.type !== "ceiling", c = wall ? WALL : CEIL, r = wall ? 9 : 8;
+      if (wall) {
+        const dy = pt.wall === "top" ? r + 8 : -(r + 8);
+        el("line", { x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y + dy, stroke: c, "stroke-width": 2 }, g);
+      }
+      el("circle", { cx: pt.x, cy: pt.y, r: r + 4, fill: c, "fill-opacity": 0.15, stroke: "none" }, g);
+      el("circle", { cx: pt.x, cy: pt.y, r, fill: "#fff", stroke: c, "stroke-width": 2 }, g);
+      const k = r * 0.7;
+      el("path", { d: `M${pt.x - k} ${pt.y - k}L${pt.x + k} ${pt.y + k}M${pt.x + k} ${pt.y - k}L${pt.x - k} ${pt.y + k}`, stroke: c, "stroke-width": 1.6 }, g);
+      const lab = (wall ? "WL " : "CL ") + pt.label + (wall ? " (outdoor)" : "");
+      txt(pt.x + r + 4, pt.y - 2, lab, { size: 9, fill: c, parent: g, weight: 700 });
+      txt(pt.x + r + 4, pt.y + 8, `x ${pt.x} / y ${pt.y}`, { size: 7, fill: c, parent: g });
+      const cov = wall ? lightCover(pt) : null;
+      if (cov) txt(pt.x + r + 4, pt.y + 18, "COVERED by " + cov.label, { size: 8, fill: "#c62828", parent: g, weight: 700 });
+    });
+    // legend box (top-left, inside the plan margin)
+    const L = el("g", { transform: `translate(0, ${size()[1] + 105 + Math.max(0, ...F().doors.filter(d => d.hinge[1] > size()[1]).map(d => d.hinge[1] + d.width - size()[1] - 40))})` }, g);
+    el("rect", { x: 0, y: 0, width: 300, height: 52, rx: 4, fill: "#fff", "fill-opacity": 0.93, stroke: "#999", "stroke-width": 0.8 }, L);
+    el("circle", { cx: 12, cy: 13, r: 6, fill: "#fff", stroke: CEIL, "stroke-width": 2 }, L);
+    txt(24, 16, "CL = ceiling light point (plafondlichtpunt)", { size: 8.5, fill: CEIL, parent: L, weight: 700 });
+    el("circle", { cx: 12, cy: 29, r: 6, fill: "#fff", stroke: WALL, "stroke-width": 2 }, L);
+    const nWallIn = P.electrical.points.filter(p => p.type === "wall").length;
+    txt(24, 32, `WL = wall light point (wandlichtpunt); indoor: ${nWallIn || "none on this floor"}`, { size: 8.5, fill: WALL, parent: L, weight: 700 });
+    el("circle", { cx: 12, cy: 44, r: 3, fill: "#fff", stroke: SW, "stroke-width": 1.2 }, L);
+    txt(24, 47, "S = switch (letter = light it controls)", { size: 8.5, fill: SW, parent: L });
   }
 
   function txt(x, y, s, o = {}) {
@@ -471,7 +518,9 @@
     document.querySelectorAll("#tabs button").forEach(b => { const on = Number(b.dataset.floor) === floor; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
     document.getElementById("wallRow").style.display = floor === 0 && P.hallWall ? "flex" : "none";
     document.getElementById("wallChk").checked = wallOff();
-    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...((cur() || {}).notes || []), ...(fm.notes || [])].map(n => "<li>" + n + "</li>").join("");
+    document.getElementById("lightsRow").style.display = floor === 0 && P.electrical ? "flex" : "none";
+    document.getElementById("lightsChk").checked = showLights;
+    document.getElementById("notes").innerHTML = [...(wallOff() ? ["<b>" + P.hallWall.note + "</b>"] : []), ...(showLights && floor === 0 && P.electrical ? P.electrical.notes.map(n => "<b>" + n + "</b>") : []), ...((cur() || {}).notes || []), ...(fm.notes || [])].map(n => "<li>" + n + "</li>").join("");
     const ls = document.getElementById("layoutSel");
     const lsKey = floor + ":" + (F().layouts || []).map(l => l.id).join(",");
     if (ls.dataset.key !== lsKey) { ls.innerHTML = (F().layouts || []).map(l => `<option value="${l.id}">${l.label}</option>`).join(""); ls.dataset.key = lsKey; }
@@ -545,12 +594,14 @@
     pickLayout(ev.target.value); selId = null;
     syncHash(); render();
   };
-  const syncHash = () => history.replaceState(null, "", "#" + (floor === 1 ? "floor=1&" : "") + "layout=" + layoutId + (wallOff() ? "&wall=off" : ""));
+  const syncHash = () => history.replaceState(null, "", "#" + (floor === 1 ? "floor=1&" : "") + "layout=" + layoutId + (wallOff() ? "&wall=off" : "") + (showLights && floor === 0 ? "&lights=1" : ""));
+  document.getElementById("lightsChk").onchange = ev => { showLights = ev.target.checked; syncHash(); render(); };
   document.getElementById("wallChk").onchange = ev => { P.hallWall.removed = ev.target.checked; syncHash(); render(); };
   window.addEventListener("hashchange", () => {
     const hp = new URLSearchParams(location.hash.slice(1)), id = hp.get("layout");
     setFloor(hp.get("floor") === "1" ? 1 : 0);
     if (hp.get("wall") && P.hallWall) P.hallWall.removed = hp.get("wall") === "off";
+    showLights = hp.get("lights") === "1";
     if (id && id !== layoutId) { pickLayout(id); selId = null; }
     render();
   });
